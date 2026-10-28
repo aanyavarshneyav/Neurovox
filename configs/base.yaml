@@ -1,0 +1,77 @@
+# Base configuration for SKA-HNN and IAAMSoftmax reproduction
+# All parameters carry explicit provenance tags
+
+project:
+  name: "neurovox"
+  description: "Scaled SKA-HNN + IAAMSoftmax on LibriSpeech"
+  authors: "Alam et al. (IJCNN 2025)"
+
+hardware:
+  device: "auto" # auto selects mps > cuda > cpu [Engineering Choice]
+  num_workers: 2 # sized for macOS unified memory [Engineering Choice]
+  pin_memory: false # false for MPS [Engineering Choice]
+
+audio:
+  sampling_rate: 16000 # [Paper]
+  n_mels: 80 # [Paper]
+  win_length_ms: 25.0 # [Paper]
+  hop_length_ms: 10.0 # [Paper]
+  segment_frames: 180 # ~1.8 seconds [Paper]
+
+augmentation:
+  speed_perturbation:
+    enabled: true
+    factors: [0.95, 1.0, 1.05] # paper gives range 0.95-1.05 [Paper]; this discrete set is [Engineering Choice]
+  rirs_noises:
+    enabled: true
+    rir_prob: 0.5 # [Engineering Choice] (paper gives no probabilities)
+    path: "data/raw/RIRS_NOISES" # [Engineering Choice]
+  synthetic_noise:
+    enabled: true # [Engineering Choice]
+    babble_prob: 0.4 # [Engineering Choice]
+    babble_snr_range: [10.0, 20.0] # [Engineering Choice]
+    gaussian_prob: 0.3 # [Engineering Choice]
+    gaussian_snr_range: [5.0, 15.0] # [Engineering Choice]
+  specaugment:
+    enabled: true # [Paper]
+    freq_mask_param: 10 # [External-UNVERIFIED] (paper gives no widths)
+    time_mask_param: 15 # [External-UNVERIFIED]
+
+model:
+  name: "scaled_skahnn" # [Engineering Choice]
+  c_2d: 32 # Scaled 2D-CNN channels (Paper: 128) [Engineering Choice]
+  c_1d: 256 # Scaled TDNN/LSTM channels (Paper: 512) [Engineering Choice]
+  d_attn: 128 # Scaled MLASP bottleneck (Paper: 256) [Engineering Choice]
+  emb_dim: 192 # Speaker embedding dimension [Paper]
+  local_stats_window: 21 # Sliding window size in frames [External-UNVERIFIED]
+  ablation_switches:
+    use_2dcnn: true
+    use_ska: true
+    use_mlfc: true
+    use_mlasp_context: true
+
+loss:
+  name: "iaam_softmax" # [Paper]
+  scale: 30.0 # [Paper]
+  margin: 0.2 # [Paper]
+  adaptive_drop:
+    tau: 0.423 # [Paper] (cos 65 deg)
+    warmup_epochs: 5 # ESD [Paper]
+    esc_epochs: 5 # ESC [Engineering Choice]
+    correction_tau: 0.5 # [External-UNVERIFIED]
+    min_keep_ratio: 0.5 # Safety guard to prevent empty batch [Engineering Choice]
+
+training:
+  batch_size: 64 # 64 speakers per batch [Paper]
+  epochs: 30 # re-scoped after hardware benchmark [Engineering Choice]
+  optimizer: "adam" # [Paper]
+  lr_init: 1.0e-7 # [Paper]
+  lr_max: 1.0e-3 # [Engineering Choice]
+  weight_decay: 1.0e-4 # [Engineering Choice]
+  grad_clip: 3.0 # [Engineering Choice]
+  seed: 42 # [Engineering Choice]
+
+evaluation:
+  scoring: "cosine" # [Paper]
+  dual_priors: [0.01, 0.05] # [Engineering Choice]
+  bootstrap_iterations: 1000 # [Engineering Choice]
