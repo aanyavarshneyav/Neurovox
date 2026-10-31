@@ -2,9 +2,10 @@
 
 ## 1. Project Identity & Scope (5-Line Summary)
 - **Goal:** Reproduce the SKA-HNN backbone and IAAMSoftmax/AdaptiveDrop loss from Alam et al. (IJCNN 2025) on LibriSpeech.
-- **Hardware:** Local Mac M3 Pro (MPS/CPU) primary; Google Colab (T4/A100) available as secondary compute.
+- **Hardware Profile:** Dual platform — MacBook Pro (Apple M3 Pro, 11 cores, 18 GB RAM, macOS 26.5, `device=mps` with CPU fallback) and Google Colab (Tesla T4 GPU, CUDA). Run locations decided per experiment type based on measured benchmarks.
+- **Policy & Code Integrity:** The course has no AI-use policy; AI-written code is permitted. Any historical "must write yourself" language is relaxed (see ADR-012).
 - **Success Criteria:** Pipeline executes end-to-end without error, reproduces relative ablation rankings on clean and noisy data, and preserves strict scientific integrity.
-- **Methodology:** Scaled channel dimensions ($C=32, C_1=256$) to prevent overfitting on 251 speakers, with baseline capacities matched or reported side-by-side.
+- **Methodology & Baseline:** Scaled channel dimensions ($C=32, C_1=256$) to prevent overfitting on 251 speakers, with baseline capacities matched or reported side-by-side.
 - **Tier Structure:** Tier 0 (Baselines: ECAPA-TDNN) → Tier 1 (Core SKA-HNN S0 & S1) → Tier 2 (Ablations S2–S6) → Tier 3 (Synthetic Noise & SSL WavLM K-Means) → Tier 4 (Extensions).
 
 ---
@@ -41,6 +42,7 @@
 2. **Clustered / Paired Bootstrap:** Compute 95% confidence intervals using paired bootstrap resampling over speakers or utterances (not individual trial lines). Competing models must be evaluated against identical bootstrap resample indices.
 3. **Dual minDCF Priors:** Always report minimum Detection Cost Function at BOTH $P_{\text{target}} = 0.01$ AND $P_{\text{target}} = 0.05$ (with $C_{\text{miss}} = 1.0, C_{\text{fa}} = 1.0$).
 4. **Parameter-Matched Baselines:** Baselines (Tier 0 ECAPA-TDNN) must be evaluated both parameter-matched to the scaled SKA-HNN and at standard width ($C=1024$), reporting measured `torchinfo` counts for both, to eliminate capacity confounding. No parameter figure is assumed before measurement.
+5. **Hardware & Precision Consistency:** Comparisons between competing systems must use identical hardware and numerical precision. Explicitly log device name, compute platform, and precision per run in [docs/RESULTS_LOG.md](docs/RESULTS_LOG.md).
 
 ---
 
@@ -48,6 +50,8 @@
 1. **fp32 Local Statistics:** Sliding-window local statistics ($\mu_t, \sigma_t$) must always be computed in `torch.float32`. Apply `torch.clamp(var, min=1e-5)` before `torch.sqrt` to prevent catastrophic cancellation.
 2. **Device-Agnostic Code:** All code must dynamically select `mps`, `cuda`, or `cpu` via `device = torch.device(...)`.
 3. **MPS Safety Guardrails:** On Apple Silicon Mac M3 Pro (`mps`), do NOT use `torch.cuda.amp.GradScaler`. Loss computation and prototype angular margins run in `torch.float32`. Autocast is enabled only where verified stable.
+4. **MPS Operator Fallback:** Set `PYTORCH_ENABLE_MPS_FALLBACK=1` in run scripts. This enables PyTorch to execute operations unsupported by MPS on the CPU rather than crashing with `NotImplementedError`.
+5. **Measured Machine Environment:** MacBook Pro 14-inch (Apple M3 Pro, 11 cores [5P+6E], Model Mac15,6 MRX33HN/A); OS: macOS 26.5 (Build 25F71); Memory: 18.00 GB (19,327,352,832 bytes via `sysctl hw.memsize`); Disk: 28.02 GB free; Python 3.12.5; PyTorch 2.15.0; TorchAudio 2.11.1.
 
 ---
 

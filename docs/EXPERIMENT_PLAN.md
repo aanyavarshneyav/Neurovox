@@ -1,7 +1,8 @@
 # EXPERIMENT_PLAN.md — Tiers, Hypotheses & Technical Gates
 
 **Project:** Scaled Reproduction of SKA-HNN and IAAMSoftmax on LibriSpeech  
-**Compute Execution:** Local Apple Mac M3 Pro (MPS) primary, Google Colab secondary.  
+**Compute Execution:** Local Apple Mac M3 Pro (MPS primary with CPU fallback, `PYTORCH_ENABLE_MPS_FALLBACK=1`). No Colab.  
+**Policy:** Course has no AI-use policy; AI-written code is permitted across all components (ADR-012).  
 **Phase 1 Kickoff Task:** Hardware Benchmark & Environment Verification (Task 1).
 
 ---
@@ -126,9 +127,49 @@ Before launching full multi-epoch training runs, Task 1 of Phase 1 will execute 
 
 ---
 
-## 3b. Compute Budget
+## 3b. Calibrated Compute Budget & Feasibility
 
-TBD: set after the Phase 1 hardware benchmark (epoch time with data loading, peak memory, number of feasible runs). No GPU-hour or epoch estimates are assumed before then.
+Following Phase 1A measurements logged in [docs/BENCHMARKS.md](BENCHMARKS.md):
+- **Batch compute latency:**
+  - *Full Model with SKA:* **$411.52\text{ ms/batch}$** ($B=64$, Composite Scaled SKA-HNN on Mac M3 Pro, `fp32`) `[Measured]`.
+  - *Lower Bound (Plain Conv2d):* **$116.51\text{ ms/batch}$** (omitting SKA branches and TDNN dilations) `[Measured]`.
+- **DataLoader batch latency:** **$26.36\text{ ms/batch}$** ($4\text{ workers}$ on genuine LibriSpeech FLAC) `[Measured]`. Data loading latency is completely hidden by asynchronous pre-fetching.
+- **Batches per 28,539-utterance epoch:** $\lceil 28,539 / 64 \rceil = \mathbf{446\text{ batches}}$ `[Derived]`.
+- **Estimated time per epoch (Full SKA):** $446 \times 0.41152\text{ s} \times 1.10 \approx \mathbf{201.89\text{ seconds}}$ ($\approx \mathbf{3.36\text{ minutes/epoch}}$) including validation and logging `[ESTIMATE]`.
+- **Estimated time per 30-epoch run (Full SKA):** $30 \times 201.89\text{ s} \approx \mathbf{100.9\text{ minutes}}$ ($\approx \mathbf{1.68\text{ hours}}$) `[ESTIMATE]`.
+- **Daily capacity (Mac M3 Pro):** $24\text{ hours} / 1.68\text{ hours/run} \approx \mathbf{14.3\text{ full 30-epoch runs per 24 hours}}$ `[ESTIMATE]`.
+
+---
+
+## 3c. Run Location Decision & Workload Allocation
+
+All experimental runs execute locally on Apple Silicon Mac M3 Pro (`device = mps`, `torch.float32`). Google Colab (Tesla T4) is not pursued; Colab configuration and runner (`notebooks/colab_runner.ipynb`) remain available solely as a secondary fallback if needed.
+
+### Plan-Level Compute Budget & Proposed Allocation
+
+The roadmap comprises **51 total runs** across 5 tiers:
+- **Tier 0 Baselines:** 2 models (matched, standard) $\times$ 3 seeds $= 6\text{ runs}$ ($\approx 10.1\text{ hours}$).
+- **Tier 1 Core Systems:** 2 models (S0, S1) $\times$ 3 seeds $= 6\text{ runs}$ ($\approx 10.1\text{ hours}$).
+- **Tier 2 Ablations:** 5 systems (S2–S6) $\times$ 3 seeds $= 15\text{ runs}$ ($\approx 25.3\text{ hours}$).
+- **Tier 3 Part A (Synthetic Noise):** 3 noise levels ($10\%, 20\%, 40\%$) $\times$ 2 models $\times$ 3 seeds $= 18\text{ runs}$ ($\approx 30.3\text{ hours}$).
+- **Tier 3 Part B (WavLM Pseudo-Labels):** 2 models $\times$ 3 seeds $= 6\text{ runs}$ ($\approx 10.1\text{ hours}$).
+- **Tier 4 Extensions:** AS-Norm and VoxCeleb1-O zero-shot (inference-only on existing checkpoints, $0\text{ training runs}$).
+
+**Plan-Level Total Estimates:**
+- **Full Portfolio (51 runs = 1,530 epochs):**
+  $$\text{Total Compute Time} = 1,530\text{ epochs} \times 201.89\text{ s/epoch} \approx \mathbf{308,892\text{ seconds}} \approx \mathbf{85.8\text{ hours}}\quad (\approx \mathbf{3.58\text{ days}})\quad \text{[ESTIMATE]}$$
+- **Pruned Core Portfolio (31 runs = 930 epochs):**
+  $$\text{Total Compute Time} = 930\text{ epochs} \times 201.89\text{ s/epoch} \approx \mathbf{187,758\text{ seconds}} \approx \mathbf{52.2\text{ hours}}\quad (\approx \mathbf{2.17\text{ days}})\quad \text{[ESTIMATE]}$$
+
+> [!IMPORTANT]
+> **Re-measurement Requirement:** These plan-level estimates are computed from synthetic benchmark step latencies and must be formally re-measured and calibrated after the first real training epoch executes.
+
+**Proposed Cut Order (if constrained by local execution time):**
+1. **Cut Priority 1 (Noise sweep pruning):** Drop the $10\%$ synthetic noise sweep in Tier 3 Part A, retaining $20\%$ and $40\%$ noise. *Saves 6 runs ($\approx 10.1\text{ hours}$).*
+2. **Cut Priority 2 (Ablation seed reduction):** Execute Tier 2 ablations S2–S6 on single seed (`seed 42`) first, running additional seeds only for variants where performance differences are within error margins. *Saves 10 runs ($\approx 16.8\text{ hours}$).*
+3. **Cut Priority 3 (SSL seed reduction):** Execute Tier 3 Part B (WavLM pseudo-labels) on single seed (`seed 42`). *Saves 4 runs ($\approx 6.7\text{ hours}$).*
+
+*Pruned Core Portfolio:* **31 runs** ($\approx 52.2\text{ hours}$ total). User to select preferred allocation.
 
 ---
 

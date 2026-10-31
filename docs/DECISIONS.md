@@ -104,3 +104,62 @@ This document records the architectural, methodological, and experimental design
 - **Context:** The first Phase 0 docs tagged items `[Paper]` without having read the PDF. The text was then extracted with pypdf (installed in the project `.venv`; scratch text kept outside the repo) and every `[Paper]` tag was re-checked.
 - **Decision:** `[Paper]` is used only for items found in the paper text, tables, algorithm or appendix. Items from the PRD or companion work are `[External-UNVERIFIED]`. Items absent from the paper and chosen by us are `[Engineering Choice]`.
 - **Consequences:** `d_attn`, SKA branch details, SE ratio, LS window, kernels/strides/dilations, SpecAugment mask widths, max LR, Adam betas and the correction rule are tagged as not in the paper.
+
+---
+
+## ADR-011: Dedicated Apple Silicon Mac M3 Pro Training Hardware & Environment
+- **Date:** 2026-10-29
+- **Status:** Accepted
+- **Context:** Initial planning documents contemplated Google Colab (T4/A100) as secondary compute. The experimental execution will run entirely on local Apple Silicon hardware.
+- **Decision:** Target local Apple Mac M3 Pro exclusively (`device = mps` with CPU fallback). No Colab compute will be used. Verified hardware environment:
+  - Machine: MacBook Pro 14-inch (Model Mac15,6 MRX33HN/A)
+  - CPU / GPU: Apple M3 Pro, 11 cores (5 Performance, 6 Efficiency)
+  - Unified Memory: 18.00 GB (19,327,352,832 bytes via `sysctl hw.memsize`)
+  - OS: macOS 26.5 (Build 25F71)
+  - Available Storage: 28.02 GB free disk space
+  - Software Stack: Python 3.12.5, PyTorch 2.15.0, TorchAudio 2.11.1
+- **Consequences:** Eliminates external cloud dependencies, session disconnects, and cloud storage transfer overheads. Experiment budgets and batch sizes must be calibrated strictly to M3 Pro MPS throughput and memory constraints.
+
+---
+
+## ADR-012: Course Policy Alignment on AI Code Generation
+- **Date:** 2026-10-29
+- **Status:** Accepted
+- **Context:** Earlier PRD drafts included strict academic boilerplate ("MUST WRITE YOURSELF") to avoid academic integrity issues. Clarification from the user confirmed that the course has no policy restricting AI usage, and AI-written code is fully permitted across all architectural and pipeline components.
+- **Decision:** Remove and relax all "must write yourself" language from project documentation. Antigravity and pair-programming agents may synthesize model components, losses, data loaders, and evaluation routines directly, provided code correctness, typing, and test standards are rigorously upheld.
+- **Consequences:** Clarifies engineering permissions and removes obsolete constraints on code generation.
+
+---
+
+## ADR-013: Mandatory MPS CPU Fallback Flag (`PYTORCH_ENABLE_MPS_FALLBACK=1`)
+- **Date:** 2026-10-29
+- **Status:** Accepted
+- **Context:** PyTorch's Metal Performance Shaders (MPS) backend does not implement all PyTorch operators. By default, hitting an unsupported kernel throws a terminating `NotImplementedError`.
+- **Decision:** Set `PYTORCH_ENABLE_MPS_FALLBACK=1` in the environment for all benchmark, training, and evaluation scripts.
+- **Consequences:** Unsupported operations automatically execute on CPU while logging a warning, guaranteeing pipeline continuity and preventing catastrophic crash on rare operators.
+
+---
+
+## ADR-014: Dual Compute Infrastructure & Configurable Storage Paths (Colab T4 Support)
+- **Date:** 2026-10-29
+- **Status:** Accepted
+- **Context:** In addition to the local Apple Silicon Mac M3 Pro, training can also leverage Google Colab (Tesla T4 GPU with up to 200 compute units available). Running workloads interchangeably across local and cloud environments requires robust, device-agnostic execution, automatic accelerator selection (`cuda > mps > cpu`), precision handling (fp16 with GradScaler on CUDA, fp32 on MPS), and flexible storage path resolution without hardcoding local directories (`/Users`) or cloud directories (`/content`).
+- **Decision:**
+  1. Support dual execution targets: Apple Mac M3 Pro (`device = mps`) and Google Colab (`device = cuda`). System comparisons must be conducted on identical hardware and precision.
+  2. Implement centralized path resolution via `src.utils.paths` respecting environment variables `DATA_ROOT`, `CACHE_ROOT`, and `CKPT_ROOT`. Default to repo-relative paths on macOS and `/content/*` on Colab.
+  3. Provide `notebooks/colab_runner.ipynb` for idempotent Google Drive mounting, single-file archive transfer to fast local SSD, environment checks, and continuous checkpoint synchronization back to Drive.
+  4. Allocate experimental tiers across platforms based on empirical throughput benchmarks and compute unit efficiency.
+- **Consequences:** Full portability and flexibility between local and cloud training runs, with zero hardcoded filesystem paths and rigorous tracking of hardware and precision in results logs.
+
+---
+
+## ADR-015: Training Epoch Definition, Batch Sampling Protocol, and Schedule Progression
+- **Date:** 2026-10-31
+- **Status:** Accepted
+- **Context:** In speaker recognition, training batch formulation directly affects margin loss optimization and curriculum schedules. A draft PRD stated that an epoch consists of "visiting all 251 speakers once". With batch size $B=64$, visiting 251 speakers would yield $\lceil 251 / 64 \rceil \approx 4\text{ batches}$ per epoch. A 4-batch epoch would process only $\approx 256$ utterances out of the 28,539 utterances in LibriSpeech `train-clean-100` ($<1\%$ dataset coverage), rendering epoch-based scheduling (learning rate decay, validation checks, and AdaptiveDrop warmup $ESD=5$ / $ESC=5$) completely broken and ineffective.
+- **Decision:**
+  1. Define 1 "training epoch" as exactly one complete pass through the training utterance volume: $\lceil 28,539 / 64 \rceil = \mathbf{446\text{ batches}}$ of size $B=64$ (28,539 utterances per epoch) `[Engineering Choice]`.
+  2. Batch formulation: In each batch of 64, sample 64 distinct speakers randomly without replacement from the 251 training speakers, taking one random 180-frame utterance crop per speaker `[Engineering Choice]`. Across 446 batches, utterances are visited uniformly while ensuring all 64 items within any batch belong to distinct speaker classes (preventing duplicate-speaker collisions within mini-batch margin loss).
+  3. AdaptiveDrop scheduling: The warmup threshold ($ESD=5$) and label correction threshold ($ESC=5$) increment in terms of these 446-batch epochs (i.e. $5 \times 446 = 2,230\text{ gradient steps}$) `[Engineering Choice]`.
+  4. Explicitly reject the draft PRD's ~4-batch "visit all 251 speakers" wording as invalid for dataset coverage.
+- **Consequences:** Guarantees proper stochastic gradient descent, uniform speaker coverage, full dataset exposure each epoch, and predictable AdaptiveDrop curriculum progression.

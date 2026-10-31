@@ -1,0 +1,42 @@
+[
+  {
+    "num_workers": 0,
+    "batch_size": 64,
+    "batches_processed": 30,
+    "total_samples": 1920,
+    "elapsed_sec": 3.13,
+    "samples_per_sec": 613.33,
+    "batches_per_sec": 9.58,
+    "avg_batch_latency_ms": 104.35
+  },
+  {
+    "num_workers": 2,
+    "batch_size": 64,
+    "batches_processed": 30,
+    "total_samples": 1920,
+    "elapsed_sec": 1.564,
+    "samples_per_sec": 1227.79,
+    "batches_per_sec": 19.18,
+    "avg_batch_latency_ms": 52.13
+  },
+  {
+    "num_workers": 4,
+    "batch_size": 64,
+    "batches_processed": 30,
+    "total_samples": 1920,
+    "elapsed_sec": 0.791,
+    "samples_per_sec": 2428.12,
+    "batches_per_sec": 37.94,
+    "avg_batch_latency_ms": 26.36
+  },
+  {
+    "num_workers": 6,
+    "batch_size": 64,
+    "batches_processed": 30,
+    "total_samples": 1920,
+    "elapsed_sec": 0.725,
+    "samples_per_sec": 2648.85,
+    "batches_per_sec": 41.39,
+    "avg_batch_latency_ms": 24.16
+  }
+]

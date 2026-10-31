@@ -11,9 +11,8 @@ __pycache__/
 htmlcov/
 
 # Data, checkpoints, and experiment outputs
-data/raw/
-data/processed/
-data/manifests/
+data/
+cache/
 checkpoints/
 outputs/
 logs/
