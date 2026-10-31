@@ -1,34 +1,58 @@
 # Session Handoff & State Summary
 
 **Date:** 2026-10-31  
-**Current Phase:** Phase 1A Wrap-Up Complete (Environment, Hardware, DataLoader, Disk Plan, and Schedule ADR)  
+**Current Phase:** Phase 1B Implementation & Pre-Download Validation Complete  
 **Git Commit:** `843b2dfa3e67f09690f8f619d8a06a82c926343b` (working tree has clean uncommitted files ready for review)  
-**Test Status:** All tests passing (15 passed in 0.90s)  
+**Test Status:** All tests passing (27 passed in 2.22s)  
 
 ---
 
 ## 1. Accomplishments This Session
-- **Environment & Spec Verification:** Re-verified environment using `check_env.py` and direct command: Python 3.12.5, PyTorch 2.15.0, TorchAudio 2.11.1, macOS 26.5 (Build 25F71, Kernel Darwin 25.5.0), Apple M3 Pro (11 cores), 18.00 GB RAM, 27.52 GB free disk space.
-- **Full SKA Benchmark Suite (`scripts/benchmark_hardware.py`):**
-  - Documented plain Conv2d stack (4 convs, no SKA, no dilations: 58.78 ms/step) vs. full SKA Conv2d stack (preceding conv, 2 SKA ResBlocks with fwSKA/cwSKA dual dilated conv branches $d=[1, 2]$ + SE $r=8$ + residual skip, succeeding conv: 282.78 ms/step).
-  - Documented composite pipeline lower bound (116.51 ms/step) and added full composite mock matching all contracts in `docs/ARCHITECTURE.md` (2D-CNN with SKA ResBlocks + TDNN-LSTM + 3-layer Fully-TDNN with dilations $d=[1, 2, 3]$ + MLASP attention + classifier): **411.52 ms/step** (2.43 steps/s) on MPS `fp32`.
-  - Added finding that autocast `fp16` and `bf16` show no speed or memory improvement on MPS (fp32 was slightly faster; memory allocation was identical at 32.88 MB current allocated), confirming `fp32` as the default.
-- **Colab Scope Update:** Marked Platform B and all Colab T4 columns in `docs/BENCHMARKS.md` as "Not pursued — training on Mac only". Retained `notebooks/colab_runner.ipynb` and a one-line note in `docs/EXPERIMENT_PLAN.md` solely as a secondary fallback.
-- **Disk Plan (`docs/DATA_PROTOCOL.md` Section 4):** Documented available free space (~27.5–27.9 GB); enforced tarball cleanup immediately after verified extraction; explicitly decided against building the 11.6 GB int16 memmap cache (since on-the-fly FLAC decoding at 26.36 ms/batch is 15.6x faster than model step, hiding I/O completely); established a minimum free disk buffer of $\ge 8\text{ GB}$.
-- **Training Epoch ADR (`docs/DECISIONS.md` ADR-015):** Defined training epoch = 446 batches of size 64 (28,539 utterances), with each batch sampling 64 distinct speakers without replacement; AdaptiveDrop warmup $ESD=5$ and correction $ESC=5$ count in these epochs; explicitly rejected the draft PRD's ~4-batch "visit all 251 speakers" wording.
-- **Plan-Level Budget Calibration (`docs/BENCHMARKS.md` & `docs/EXPERIMENT_PLAN.md`):** Replaced daily rate estimates with plan-level totals: full portfolio (51 runs = 1,530 epochs $\approx 85.8\text{ hours}$ / ~3.58 days) and pruned portfolio (31 runs = 930 epochs $\approx 52.2\text{ hours}$ / ~2.17 days), explicitly labeled `[ESTIMATE]` and noting requirement to re-measure after the first real training epoch.
-- **Pre-Commit Checks & Tests:** AGENTS.md size is 8,722 characters (strictly $< 11,000$); zero hardcoded paths (`/Users` or `/content`) across `src/` and `scripts/`; test suite completely green (15 passed).
+- **Download Automation & Buffer Management (`scripts/download_data.py`):**
+  - Implemented LibriSpeech download script with HTTP Range resume support, OpenSLR MD5 verification, and sequential extract-then-delete logic.
+  - Calculated exact download footprints: 7,400,657,612 bytes (6.89 GiB / ~7.40 GB compressed), ~8.96 GiB extracted.
+  - Verified disk safety: Mac currently has 26.76 GiB free; peak extraction requires ~14.3 GiB, leaving >12.4 GiB free buffer during extraction and ~17.8 GiB free after tarball deletion, easily exceeding the $\ge 8.0\text{ GB}$ buffer constraint in `docs/DATA_PROTOCOL.md`.
+- **Manifest Pipeline (`src/data/prep_librispeech.py`):**
+  - Parses `SPEAKERS.TXT` (mapping ID to biological gender and subset).
+  - Uses `soundfile` for exact duration extraction.
+  - Generates standardized CSV manifests (`utt_id`, `spk_id`, `chapter_id`, `gender`, `path`, `duration`, `split`).
+  - Generates contiguous zero-indexed speaker mapping for training (`train_spk2label.json`).
+  - Tested on existing `dev-clean` partition: successfully indexed all 2,703 utterances.
+- **Biometric Trial Generator & Audit Reporting (`src/data/trial_generator.py`):**
+  - Enforces strict 100% cross-chapter target trials ($y_1 = y_2, \text{chapter}_1 \neq \text{chapter}_2$) and excludes single-chapter speakers without fallback.
+  - Samples targets uniformly across qualifying speakers.
+  - Generates balanced gender-matched impostor pairs ($y_1 \neq y_2, \text{gender}_1 = \text{gender}_2$).
+  - Emits `trials_report.json` with excluded speaker records, per-speaker target/impostor counts, utterance reuse statistics, and SHA-256 file checksums.
+  - Tested on `dev-clean`: correctly excluded 9 single-chapter speakers (22.5%), produced 6,200 trials (3,100 targets, 3,100 impostors) with uniform 100 targets/speaker and mean reuse of 4.76x.
+- **Biometric Evaluation Metrics (`src/eval/metrics.py`):**
+  - Implemented vectorized $O(N \log N)$ `compute_eer` matching `speechbrain.utils.metric_stats.EER` to numerical precision ($< 10^{-6}$).
+  - Implemented `compute_mindcf` supporting configurable $P_{\text{target}}$ (reporting both $0.01$ and $0.05$).
+  - Implemented `compute_det_curve` (FAR/FRR arrays) and paired clustered bootstrap confidence intervals (`paired_bootstrap_ci`) resampling speakers/utterances identically across systems.
+- **Rigorous Metric Unit Tests (`tests/test_metrics.py`):**
+  - Perfect separation (EER = 0.0, minDCF = 0.0).
+  - Random scores (EER $\approx 50\%$).
+  - Asymptotic convergence to exact analytic Gaussian EER ($\mu_0=-1, \mu_1=1, \sigma=1 \to 15.8655\%$).
+  - Label-direction test (flipping labels yields $100\% - \text{EER}$, failing loudly on misinterpretation).
+  - Numerical parity assertion against `speechbrain.utils.metric_stats`.
+- **Data Integrity Tests (`tests/test_data_integrity.py`):**
+  - Asserted zero pairwise speaker overlap across `train-clean-100`, `dev-clean`, `test-clean`, and `test-other`.
+  - Asserted file existence, duration matching, and cross-chapter / gender-matched constraints.
+- **Pretrained ECAPA Sanity Check Script (`scripts/eval_pretrained_ecapa.py`):**
+  - Prepared standalone runner for the optional ~100 MB SpeechBrain checkpoint on `test-clean` trials, with bounds checks ($0.1\% \le \text{EER} \le 10.0\%$).
+- **Architecture Decisions Record (`docs/DECISIONS.md` ADR-016):**
+  - Formally logged trial volume calibration, single-chapter speaker exclusion, and reuse transparency.
+- **Pre-Commit Sanity Passed:** 27 of 27 pytest tests passing; `AGENTS.md` is 8,722 chars (< 11,000); zero unmeasured numbers in docs; zero hardcoded user paths.
 
 ---
 
 ## 2. Next 3 Immediate Tasks
-1. **Phase 1B — Manifest & Data Pipeline Implementation:** Build `src/data/manifest.py` to index LibriSpeech splits (`train-clean-100`, `dev-clean`, `test-clean`, `test-other`), asserting speaker-disjointness and verifying gender/duration distributions against documentation.
-2. **Phase 1B — Cross-Chapter Target Trial Builder:** Build `src/data/trials.py` enforcing strict cross-chapter target pairing and single-chapter test speaker exclusion per ADR-005, alongside gender-matched impostor pairs.
-3. **Phase 1C — Initial Parameter Audit & Model Scaffold:** Implement model layer skeletons and execute `torchinfo` parameter audit via `.agents/workflows/param-audit.md` to establish parameter-matched baseline specifications.
+1. **User Confirmation & Data Download Execution:** Upon user confirmation, execute `scripts/download_data.py --confirm` to download `train-clean-100`, `dev-clean`, `test-clean`, and `test-other` into `data/raw/`.
+2. **Build Full Manifests & Test Trial Lists:** Run `src/data/prep_librispeech.py` and `src/data/trial_generator.py` on `test-clean` and `test-other` to generate trial files and `trials_report.json`.
+3. **Optional External Reference Run (Task 7):** If approved by user, run `scripts/eval_pretrained_ecapa.py` to record baseline external reference EER and minDCF into `docs/RESULTS_LOG.md`.
 
 ---
 
 ## 3. Active Risks & Notes for Next Agent
-- **Disk Buffer Vigilance:** Always monitor available disk space on the Mac (`df -h .`); keep $\ge 8\text{ GB}$ free at all times. Delete archive tarballs immediately after extraction.
-- **Numerics Rules:** Sliding-window local statistics ($\mu_t, \sigma_t$) and margin losses must execute in `torch.float32`. Never use `torch.cuda.amp.GradScaler` on MPS.
-- **Atomic Commits:** Propose commits with descriptive messages, but never run `git commit` without explicit user permission.
+- **Data Download Approval Required:** Downloading the full 7.4 GB dataset requires user confirmation per `AGENTS.md` Rule 7.5. Do not run background downloads without permission.
+- **SpeechBrain Pretrained Download Approval Required:** The optional ~100 MB ECAPA-TDNN download also requires user permission per Task 7 instructions.
+- **Numerics Rules:** All verification scoring, prototype margins, and metrics calculations run in `torch.float32`.

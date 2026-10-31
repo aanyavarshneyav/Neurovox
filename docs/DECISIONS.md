@@ -163,3 +163,16 @@ This document records the architectural, methodological, and experimental design
   3. AdaptiveDrop scheduling: The warmup threshold ($ESD=5$) and label correction threshold ($ESC=5$) increment in terms of these 446-batch epochs (i.e. $5 \times 446 = 2,230\text{ gradient steps}$) `[Engineering Choice]`.
   4. Explicitly reject the draft PRD's ~4-batch "visit all 251 speakers" wording as invalid for dataset coverage.
 - **Consequences:** Guarantees proper stochastic gradient descent, uniform speaker coverage, full dataset exposure each epoch, and predictable AdaptiveDrop curriculum progression.
+
+---
+
+## ADR-016: LibriSpeech Verification Trial Volume & Uniform Sampling Protocol
+- **Date:** 2026-10-31
+- **Status:** Accepted
+- **Context:** Standard LibriSpeech test partitions (`test-clean` with 40 speakers, `test-other` with 33 speakers, `dev-clean` with 40 speakers) contain both multi-chapter and single-chapter speakers. Demanding an arbitrary hard-coded 30,000 target trials would require ~750–1,000 pairs per speaker, causing heavy utterance reuse (>15x–30x per utterance) and exceeding the total available cross-chapter pairs for speakers with fewer utterances. Furthermore, 9 out of 40 speakers in `dev-clean` (22.5%) appear in only a single chapter, making genuine cross-chapter pairing impossible for them.
+- **Decision:**
+  1. Single-chapter speakers are strictly excluded from genuine target trials (preserving 100% cross-chapter integrity per ADR-005). They are retained for gender-matched impostor trials `[Engineering Choice]`.
+  2. The target trial count is dynamically calibrated to what the data naturally supports without heavy reuse: sampling targets uniformly across qualifying speakers (capped at ~100 pairs per speaker, yielding ~3,100 targets and 3,100 gender-matched impostors = 6,200 trials for `dev-clean` and similar for `test-clean`), keeping mean utterance reuse under ~4–5x `[Engineering Choice]`.
+  3. Every trial generation run writes a comprehensive audit report (`trials_report.json`) documenting excluded speakers, fractions, per-speaker target/impostor counts, reuse histograms, and SHA-256 checksums `[Engineering Choice]`.
+- **Consequences:** Eliminates room-tone acoustic cheating, avoids artificial sample duplication, and provides complete cryptographic transparency and reproducibility for verification evaluation.
+

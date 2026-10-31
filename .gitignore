@@ -11,11 +11,11 @@ __pycache__/
 htmlcov/
 
 # Data, checkpoints, and experiment outputs
-data/
-cache/
-checkpoints/
-outputs/
-logs/
+/data/
+/cache/
+/checkpoints/
+/outputs/
+/logs/
 *.pt
 *.pth
 *.ckpt
