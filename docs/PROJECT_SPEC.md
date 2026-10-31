@@ -2,7 +2,8 @@
 
 **Title:** Scaled Reproduction of SKA-HNN and IAAMSoftmax for Text-Independent Speaker Verification on LibriSpeech  
 **Reference Paper:** J. Alam, A. Fathan, M. S. Alam, *"A Hybrid Neural Approach to Speaker Verification with an Improved Additive Angular Margin Loss"*, IJCNN 2025, DOI 10.1109/IJCNN64981.2025.11228198.  
-**Compute:** Apple Mac M3 Pro (MPS/CPU) primary; Google Colab secondary.
+**Compute:** Local Apple Mac M3 Pro (MPS with CPU fallback, `PYTORCH_ENABLE_MPS_FALLBACK=1`). No Colab.  
+**Implementation Policy:** Course has no AI-use policy; AI-written and agent-assisted code is permitted across all components (ADR-012). Historical "must write yourself" language is relaxed.
 
 **Provenance legend.** Every claim carries exactly one tag:
 - `[Paper]` — stated in the paper text, Table II/VIII, Algorithm 1, or Appendix A. Verified against the extracted PDF text on 2026-10-28.

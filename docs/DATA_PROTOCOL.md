@@ -70,22 +70,22 @@ Standard verification evaluation measures cosine similarity between pairs of utt
 
 ---
 
-## 4. Hardware-Sized Caching & I/O Strategy (Mac M3 Pro)
+## 4. Hardware-Sized Caching & Disk Strategy (Mac M3 Pro)
 
-All hardware figures are TBD: measure in the Phase 1 benchmark (decode throughput, step time, peak memory). Nothing below is a measured claim.
+Based on empirical Phase 1A measurements logged in [docs/BENCHMARKS.md](BENCHMARKS.md):
 
-1. **Raw Storage Footprint:** TBD: measure after download (approximate public sizes are `[External-UNVERIFIED]`: train-clean-100 roughly 6 GB, RIRS_NOISES 1.3 GB). Downloads over 1 GB need your confirmation first.
-2. **On-the-Fly Audio Loading:**
-   - FLACs are read via `soundfile`/`torchaudio.load`.
-   - Segments are 180 frames (`[Paper]`) cropped randomly each step.
-   - Loader cost per batch: TBD: measure.
-3. **DataLoader rules on macOS** `[Engineering Choice]`, starting defaults to validate in the benchmark:
-   - `num_workers = 2`, `persistent_workers = True`, `pin_memory = False`.
-   - Use `spawn`/`forkserver` start methods if MPS-related fork issues appear.
-4. **Google Colab (secondary compute)** `[Engineering Choice]`:
-   - Free-tier Colab has few CPU cores (`[External-UNVERIFIED]`, PRD_review says about 2), so FLAC decode and augmentation can be the bottleneck. Cache decoded segments or features on local disk when using Colab.
-   - Caching all of `train-clean-100` as int16 audio is roughly 11.6 GB per PRD_review, which does not fit in free-tier RAM. Use disk-backed caching, not RAM.
-   - CUDA autocast code paths must stay optional and must not be used on MPS.
+1. **Storage Footprint & Safety Margin:**
+   - Available free disk space on the host Mac M3 Pro is **~27.5–27.9 GB** `[Measured]`.
+   - **Tarball Cleanup Policy:** Always delete archive tarballs (e.g. `*.tar.gz`, `*.zip`) immediately after verified extraction to prevent redundant storage consumption `[Engineering Choice]`.
+   - **Minimum Free Disk Buffer:** Always preserve at least **$\ge 8\text{ GB}$** of free disk space across all data preparation and training stages to accommodate macOS unified memory virtual paging/swap `[Engineering Choice]`. Downloads over 1 GB require explicit user confirmation prior to execution.
+2. **On-the-Fly Audio Decoding (No int16 Memmap Cache):**
+   - **Decision:** Do **NOT** build an int16 memmap cache on disk `[Engineering Choice]`.
+   - *Rationale:* DataLoader throughput measurements in `docs/BENCHMARKS.md` confirm that on-the-fly FLAC decoding (`soundfile`) and CPU 80-Mel extraction take **$26.36\text{ ms/batch}$** at `num_workers = 4`, whereas forward+backward step times are **$\ge 118.61\text{ ms/step}$** (up to ~415 ms with full SKA branches). Because data loading is 4.5x to 15x faster than compute, asynchronous background pre-fetching completely hides I/O latency without needing an ~11.6 GB int16 memmap cache.
+3. **DataLoader Rules on macOS** `[Engineering Choice]`:
+   - `num_workers = 4`, `persistent_workers = True`, `pin_memory = False`.
+   - Segments are 180 frames ($29,040\text{ samples}$ @ 16 kHz) cropped randomly per training step `[Paper]`.
+4. **Google Colab Fallback** `[Engineering Choice]`:
+   - Training is performed locally on Mac M3 Pro. Colab T4 is maintained solely as a secondary fallback (`notebooks/colab_runner.ipynb`); if activated, data is copied as a single archive into `/content` to avoid per-file Google Drive latency.
 
 ---
 
