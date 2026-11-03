@@ -1,0 +1,22 @@
+{
+  "run_id": "sanity_2a_50spk_v2",
+  "config_hash": "d3d0115b",
+  "seed": 42,
+  "device": "mps",
+  "precision": "fp32",
+  "augmentation_flags": {
+    "speed": true,
+    "noise": true,
+    "babble": true,
+    "rir": false,
+    "specaug": false
+  },
+  "torch_version": "2.14.1",
+  "git_sha": "9b4cfa7c84d9d78d8203c8644fd1836714c54170",
+  "git_dirty": true,
+  "parameter_count": 410928,
+  "trainable_parameter_count": 410928,
+  "num_workers": 2,
+  "batch_size": 32,
+  "batches_per_epoch": 178
+}

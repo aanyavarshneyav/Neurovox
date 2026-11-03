@@ -244,7 +244,7 @@ def test_librispeech_dataset_with_dataloader(tmp_path: Path):
     )
 
     assert len(dataset) == 16
-    feat, label = dataset[0]
+    feat, label = dataset[(0, 0, 0)]
     assert feat.shape == (80, 180)
     assert isinstance(label, int)
 
@@ -266,4 +266,137 @@ def test_librispeech_dataset_with_dataloader(tmp_path: Path):
         assert batch_labels.shape == (4,)
         # All 4 speakers in each batch must be distinct
         assert len(set(batch_labels.tolist())) == 4
+
+
+def test_dataset_train_mode_plain_int_index_raises(tmp_path: Path):
+    """Verify __getitem__ with a plain int index raises TypeError in train mode (F2)."""
+    audio_dir = tmp_path / "audio_f2"
+    audio_dir.mkdir()
+    manifest_csv = tmp_path / "manifest_f2.csv"
+    flac_path = audio_dir / "sample.flac"
+    sf.write(str(flac_path), np.random.randn(30000).astype(np.float32) * 0.1, 16000, format="FLAC")
+    with open(manifest_csv, "w") as f:
+        f.write("utt_id,spk_id,chapter_id,gender,path,duration,split,label\n")
+        f.write(f"sample,0,ch_1,M,{flac_path},1.875,train,0\n")
+
+    dataset = LibriSpeechDataset(
+        manifest_path=manifest_csv,
+        is_train=True,
+    )
+    with pytest.raises(TypeError, match="tuple"):
+        _ = dataset[0]
+
+
+def test_same_idx_drawn_twice_in_epoch_gets_different_crop_and_aug(tmp_path: Path):
+    """Verify same idx drawn with different draw_id gets distinct crops/augmentations (F1)."""
+    audio_dir = tmp_path / "audio_draw"
+    audio_dir.mkdir()
+    manifest_csv = tmp_path / "manifest_draw.csv"
+    flac_path = audio_dir / "long_sample.flac"
+    # Long audio (4 seconds = 64000 samples) so crops differ
+    sf.write(str(flac_path), np.random.randn(64000).astype(np.float32) * 0.1, 16000, format="FLAC")
+    with open(manifest_csv, "w") as f:
+        f.write("utt_id,spk_id,chapter_id,gender,path,duration,split,label\n")
+        f.write(f"long_sample,0,ch_1,M,{flac_path},4.0,train,0\n")
+
+    dataset = LibriSpeechDataset(
+        manifest_path=manifest_csv,
+        is_train=True,
+        return_features=False,  # return waveform
+        enable_speed_aug=True,
+        enable_noise_aug=True,
+        base_seed=42,
+    )
+
+    epoch = 1
+    idx = 0
+    draw_0_wave, _ = dataset[(idx, epoch, 0)]
+    draw_1_wave, _ = dataset[(idx, epoch, 1)]
+
+    assert not torch.equal(draw_0_wave, draw_1_wave), "Two draws of same idx in one epoch must differ"
+
+
+def test_deterministic_seeding_across_workers(tmp_path: Path):
+    """Verify same (seed, epoch, idx, draw_id) reproduces across workers with babble+RIR and set_epoch changes (F1)."""
+    audio_dir = tmp_path / "audio_det"
+    audio_dir.mkdir()
+    manifest_csv = tmp_path / "manifest_det.csv"
+
+    # Create dummy RIR
+    rir_dir = tmp_path / "rirs"
+    rir_dir.mkdir()
+    dummy_rir = np.zeros(1600, dtype=np.float32)
+    dummy_rir[0] = 1.0
+    dummy_rir[150] = 0.4
+    sf.write(str(rir_dir / "test_rir.wav"), dummy_rir, 16000)
+
+    entries = []
+    # 8 speakers, 2 utterances each
+    for spk in range(8):
+        for u in range(2):
+            utt_id = f"spk{spk}_utt{u}"
+            flac_path = audio_dir / f"{utt_id}.flac"
+            data = np.random.randn(32000).astype(np.float32) * 0.1
+            sf.write(str(flac_path), data, 16000, format="FLAC")
+            entries.append(
+                f"{utt_id},{spk},ch_1,M,{flac_path},2.0,train,{spk}\n"
+            )
+
+    with open(manifest_csv, "w") as f:
+        f.write("utt_id,spk_id,chapter_id,gender,path,duration,split,label\n")
+        f.writelines(entries)
+
+    def create_pipeline(num_workers: int):
+        ds = LibriSpeechDataset(
+            manifest_path=manifest_csv,
+            is_train=True,
+            return_features=True,
+            enable_speed_aug=True,
+            enable_noise_aug=True,
+            enable_babble_aug=True,
+            enable_rir_aug=True,
+            rir_dir=rir_dir,
+            enable_specaug=True,
+            base_seed=42,
+        )
+        sampler = SpeakerBalancedBatchSampler(
+            speaker_labels=ds.labels,
+            batch_size=4,
+            batches_per_epoch=2,
+            seed=42,
+        )
+        loader = DataLoader(
+            ds,
+            batch_sampler=sampler,
+            num_workers=num_workers,
+            persistent_workers=(num_workers > 0),
+        )
+        return sampler, loader
+
+    sampler_w0, loader_w0 = create_pipeline(0)
+    sampler_w2, loader_w2 = create_pipeline(2)
+
+    # Test epoch 1
+    sampler_w0.set_epoch(1)
+    sampler_w2.set_epoch(1)
+    batches_w0_ep1 = list(loader_w0)
+    batches_w2_ep1 = list(loader_w2)
+
+    for (f0, l0), (f2, l2) in zip(batches_w0_ep1, batches_w2_ep1):
+        diff = (f0 - f2).abs().max().item()
+        assert diff < 1e-5, f"Epoch 1 mismatch: max diff = {diff:.2e}"
+        assert torch.equal(l0, l2)
+
+    # Test epoch 2 with persistent workers
+    sampler_w0.set_epoch(2)
+    sampler_w2.set_epoch(2)
+    batches_w0_ep2 = list(loader_w0)
+    batches_w2_ep2 = list(loader_w2)
+
+    for (f0, l0), (f2, l2) in zip(batches_w0_ep2, batches_w2_ep2):
+        diff = (f0 - f2).abs().max().item()
+        assert diff < 1e-5, f"Epoch 2 mismatch: max diff = {diff:.2e}"
+        assert torch.equal(l0, l2)
+
+
 

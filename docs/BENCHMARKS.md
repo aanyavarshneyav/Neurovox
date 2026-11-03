@@ -16,40 +16,43 @@ This document records measured hardware throughput, memory usage, DataLoader per
 - **Accelerator Backend:** `device = mps` with `PYTORCH_ENABLE_MPS_FALLBACK=1`
 
 ### Platform B: Google Colab GPU (Tesla T4)
-- **Status:** Not pursued — training on Mac only.
-- *Note:* Maintained in runner scripts (`notebooks/colab_runner.ipynb`) solely as a secondary fallback if needed.
+- **Status:** Target execution platform for main experiment grid (~200 compute units available).
+- **Hardware Profile:** Tesla T4 GPU (16 GB GDDR6 VRAM, Turing architecture `sm_75`), ~2 vCPU cores, ~12.7 GB system RAM.
+- **Software Environment:** PyTorch pre-installed CUDA build, cuDNN enabled, `requirements-colab.txt`.
+- **Execution Runner:** Managed via `notebooks/colab_runner.ipynb` with Google Drive checkpoint/log synchronization and resume support.
 
 ---
 
-## 2. Hardware Throughput Benchmark (Measured)
+## 2. Hardware Throughput Benchmark (Measured on Mac M3 Pro; Colab T4 Pending Run)
 
-Executed via `scripts/benchmark_hardware.py` using synthetic tensors of real operational shapes ($B=64$, acoustic input $1 \times 80 \times 180$, sequence duration $T=180$ frames). Latencies were timed with full GPU synchronization (`torch.mps.synchronize()`) over sustained executions to capture thermal equilibrium.
+Executed via `scripts/benchmark_hardware.py` using synthetic tensors of real operational shapes ($B=64$, acoustic input $1 \times 80 \times 180$, sequence duration $T=180$ frames). Latencies were timed with full GPU synchronization (`torch.mps.synchronize()` on MPS; `torch.cuda.synchronize()` on CUDA) over sustained executions to capture thermal equilibrium.
 
-| Component / Layer | Precision | Mac M3 Pro Median (ms) | Mac M3 Pro Steps/s | Mac M3 Pro Peak Driver Mem (MB) | Mac M3 Pro Throttling Delta | Colab T4 Status |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Conv2d Stack Plain ($C=32$)** | `fp32` | 58.78 | 17.01 | 1,124.84 | +0.40% | Not pursued — training on Mac only |
-| **Conv2d Stack Plain ($C=32$)** | `fp16` | 61.13 | 16.36 | 1,125.84 | +0.07% | Not pursued — training on Mac only |
-| **Conv2d Stack Plain ($C=32$)** | `bf16` | 61.30 | 16.31 | 1,125.84 | +0.30% | Not pursued — training on Mac only |
-| **Conv2d Stack Plain ($C=64$)** | `fp32` | 146.48 | 6.83 | 2,263.84 | +0.16% | Not pursued — training on Mac only |
-| **Conv2d Stack Plain ($C=64$)** | `fp16` | 147.73 | 6.77 | 2,205.84 | +0.39% | Not pursued — training on Mac only |
-| **Conv2d Stack Plain ($C=64$)** | `bf16` | 147.85 | 6.76 | 2,205.84 | +0.29% | Not pursued — training on Mac only |
-| **Conv2d Stack with SKA ($C=32$)** | `fp32` | 282.78 | 3.54 | 2,205.88 | +0.35% | Not pursued — training on Mac only |
-| **Conv2d Stack with SKA ($C=32$)** | `fp16` | 287.98 | 3.47 | 2,205.88 | +0.34% | Not pursued — training on Mac only |
-| **Conv2d Stack with SKA ($C=32$)** | `bf16` | 288.19 | 3.47 | 2,205.88 | +0.41% | Not pursued — training on Mac only |
-| **nn.LSTM ($C_1=256, T=180$)** | `fp32` | 21.17 | 47.25 | 2,307.83 | -1.57% | Not pursued — training on Mac only |
-| **nn.LSTM ($C_1=256, T=180$)** | `fp16` | 21.11 | 47.38 | 2,271.83 | +1.58% | Not pursued — training on Mac only |
-| **nn.LSTM ($C_1=256, T=180$)** | `bf16` | 21.49 | 46.54 | 2,271.83 | +0.36% | Not pursued — training on Mac only |
-| **nn.LSTM ($C_1=512, T=180$)** | `fp32` | 55.88 | 17.89 | 3,551.83 | +0.06% | Not pursued — training on Mac only |
-| **nn.LSTM ($C_1=512, T=180$)** | `fp16` | 55.47 | 18.03 | 3,519.83 | -1.11% | Not pursued — training on Mac only |
-| **nn.LSTM ($C_1=512, T=180$)** | `bf16` | 55.63 | 17.98 | 3,519.83 | -0.28% | Not pursued — training on Mac only |
-| **Conv1d Scaled ($1920 \to 256$)** | `fp32` | 26.17 | 38.22 | 1,413.75 | -0.56% | Not pursued — training on Mac only |
-| **Conv1d Scaled ($1920 \to 256$)** | `fp16` | 22.63 | 44.19 | 1,179.75 | +1.45% | Not pursued — training on Mac only |
-| **Conv1d Scaled ($1920 \to 256$)** | `bf16` | 22.70 | 44.05 | 1,179.75 | +0.09% | Not pursued — training on Mac only |
-| **Conv1d Full ($7680 \to 512$)** | `fp32` | 236.72 | 4.22 | 1,327.75 | +1.84% | Not pursued — training on Mac only |
-| **Conv1d Full ($7680 \to 512$)** | `fp16` | 155.78 | 6.42 | 2,261.75 | -8.36% | Not pursued — training on Mac only |
-| **Conv1d Full ($7680 \to 512$)** | `bf16` | 166.54 | 6.00 | 2,261.75 | -5.65% | Not pursued — training on Mac only |
-| **Composite Pipeline (Lower Bound)** | `fp32` | 116.51 | 8.58 | 2,512.03 | -0.16% | Not pursued — training on Mac only |
-| **Composite Pipeline with SKA (Full)** | `fp32` | **411.52** | **2.43** | **4,568.25** | **-0.00%** | Not pursued — training on Mac only |
+| Component / Layer | Precision | Mac M3 Pro Median (ms) | Mac M3 Pro Steps/s | Mac M3 Pro Peak Driver Mem (MB) | Mac M3 Pro Throttling Delta | Colab T4 Median (ms) | Colab T4 Steps/s | Colab T4 Peak VRAM (MB) |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Conv2d Stack Plain ($C=32$)** | `fp32` | 58.78 | 17.01 | 1,124.84 | +0.40% | TBD | TBD | TBD |
+| **Conv2d Stack Plain ($C=32$)** | `fp16` | 61.13 | 16.36 | 1,125.84 | +0.07% | TBD | TBD | TBD |
+| **Conv2d Stack Plain ($C=32$)** | `bf16` | 61.30 | 16.31 | 1,125.84 | +0.30% | N/A (T4 lacks bf16) | N/A | N/A |
+| **Conv2d Stack Plain ($C=64$)** | `fp32` | 146.48 | 6.83 | 2,263.84 | +0.16% | TBD | TBD | TBD |
+| **Conv2d Stack Plain ($C=64$)** | `fp16` | 147.73 | 6.77 | 2,205.84 | +0.39% | TBD | TBD | TBD |
+| **Conv2d Stack Plain ($C=64$)** | `bf16` | 147.85 | 6.76 | 2,205.84 | +0.29% | N/A (T4 lacks bf16) | N/A | N/A |
+| **Conv2d Stack with SKA ($C=32$)** | `fp32` | 282.78 | 3.54 | 2,205.88 | +0.35% | TBD | TBD | TBD |
+| **Conv2d Stack with SKA ($C=32$)** | `fp16` | 287.98 | 3.47 | 2,205.88 | +0.34% | TBD | TBD | TBD |
+| **Conv2d Stack with SKA ($C=32$)** | `bf16` | 288.19 | 3.47 | 2,205.88 | +0.41% | N/A (T4 lacks bf16) | N/A | N/A |
+| **nn.LSTM ($C_1=256, T=180$)** | `fp32` | 21.17 | 47.25 | 2,307.83 | -1.57% | TBD | TBD | TBD |
+| **nn.LSTM ($C_1=256, T=180$)** | `fp16` | 21.11 | 47.38 | 2,271.83 | +1.58% | TBD | TBD | TBD |
+| **nn.LSTM ($C_1=256, T=180$)** | `bf16` | 21.49 | 46.54 | 2,271.83 | +0.36% | N/A (T4 lacks bf16) | N/A | N/A |
+| **nn.LSTM ($C_1=512, T=180$)** | `fp32` | 55.88 | 17.89 | 3,551.83 | +0.06% | TBD | TBD | TBD |
+| **nn.LSTM ($C_1=512, T=180$)** | `fp16` | 55.47 | 18.03 | 3,519.83 | -1.11% | TBD | TBD | TBD |
+| **nn.LSTM ($C_1=512, T=180$)** | `bf16` | 55.63 | 17.98 | 3,519.83 | -0.28% | N/A (T4 lacks bf16) | N/A | N/A |
+| **Conv1d Scaled ($1920 \to 256$)** | `fp32` | 26.17 | 38.22 | 1,413.75 | -0.56% | TBD | TBD | TBD |
+| **Conv1d Scaled ($1920 \to 256$)** | `fp16` | 22.63 | 44.19 | 1,179.75 | +1.45% | TBD | TBD | TBD |
+| **Conv1d Scaled ($1920 \to 256$)** | `bf16` | 22.70 | 44.05 | 1,179.75 | +0.09% | N/A (T4 lacks bf16) | N/A | N/A |
+| **Conv1d Full ($7680 \to 512$)** | `fp32` | 236.72 | 4.22 | 1,327.75 | +1.84% | TBD | TBD | TBD |
+| **Conv1d Full ($7680 \to 512$)** | `fp16` | 155.78 | 6.42 | 2,261.75 | -8.36% | TBD | TBD | TBD |
+| **Conv1d Full ($7680 \to 512$)** | `bf16` | 166.54 | 6.00 | 2,261.75 | -5.65% | N/A (T4 lacks bf16) | N/A | N/A |
+| **Composite Pipeline (Lower Bound)** | `fp32` | 116.51 | 8.58 | 2,512.03 | -0.16% | TBD | TBD | TBD |
+| **Composite Pipeline with SKA (Full)** | `fp32` | **411.52** | **2.43** | **4,568.25** | **-0.00%** | TBD | TBD | TBD |
+| **Composite Pipeline with SKA (Full)** | `fp16` | N/A (fp32 on MPS) | N/A | N/A | N/A | TBD | TBD | TBD |
 
 ---
 
@@ -105,6 +108,8 @@ To ensure complete clarity regarding architectural coverage, the benchmark topol
 
 ## 5. DataLoader Throughput Benchmark (Measured)
 
+### 5.1 Apple Silicon Mac M3 Pro (11 cores [5P+6E], Measured)
+
 Executed via `scripts/benchmark_dataloader.py` on genuine LibriSpeech audio (`dev-clean`, 2,703 FLAC files):
 - Decoding: FLAC read via `soundfile`
 - Slicing: Random crop of exactly 29,040 samples (180 frames at 16 kHz, `center=False`)
@@ -118,8 +123,21 @@ Executed via `scripts/benchmark_dataloader.py` on genuine LibriSpeech audio (`de
 | `4` workers | **2,428.12** | **37.94** | **26.36** | **Optimal balance (4.5x faster than plain / 15x faster than SKA model)** |
 | `6` workers | 2,648.85 | 41.39 | 24.16 | Diminishing returns; higher process overhead |
 
-- **Winning DataLoader Setting:** `num_workers = 4`, `persistent_workers = True`, `pin_memory = False`.
+- **Winning DataLoader Setting (Mac M3 Pro):** `num_workers = 4`, `persistent_workers = True`, `pin_memory = False`.
 - *Rationale:* With $26.36\text{ ms}$ per batch, DataLoader throughput is 15.6x faster than the full model step ($411.52\text{ ms}$). Background worker pre-fetching completely hides audio loading and feature extraction latency behind model compute, while leaving 7 CPU cores free for system stability.
+
+### 5.2 Google Colab Environment (~2 CPU Cores, Pending Measurement)
+
+Executed via `scripts/benchmark_dataloader.py --num-workers 0 1 2` on Google Colab VM.
+*Note: Because Colab assigns ~2 virtual CPU cores, workers in {0, 1, 2} are evaluated. User will run this benchmark on Colab and paste the measured throughput.*
+
+| Worker Count (`num_workers`) | Throughput (samples/sec) | Throughput (batches/sec) | Average Batch Latency (ms) | Notes / CPU Utilization |
+| :--- | :--- | :--- | :--- | :--- |
+| `0` (main process only) | TBD | TBD | TBD | Single-process baseline on Colab vCPU |
+| `1` worker | TBD | TBD | TBD | 1 background worker process |
+| `2` workers | TBD | TBD | TBD | Sized for Colab 2 vCPU allocation |
+
+- **Winning DataLoader Setting (Colab):** TBD (measure via `colab_runner.ipynb`). If data loading latency exceeds model step latency, disk memmap cache (`scripts/build_audio_cache.py`) is activated.
 
 ---
 

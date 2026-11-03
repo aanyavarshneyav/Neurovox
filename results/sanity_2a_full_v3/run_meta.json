@@ -1,0 +1,44 @@
+{
+  "run_id": "sanity_2a_full_v3",
+  "config_hash": "70443f48",
+  "seed": 42,
+  "device": "mps",
+  "precision": "fp32",
+  "augmentation_flags": {
+    "speed": true,
+    "noise": true,
+    "babble": true,
+    "rir": false,
+    "specaug": true
+  },
+  "augmentation_probabilities": {
+    "speed": 0.5,
+    "noise": 0.3,
+    "babble": 0.4,
+    "rir": 0.0,
+    "specaug": 0.5
+  },
+  "torch_version": "2.14.1",
+  "git_sha": "9b4cfa7c84d9d78d8203c8644fd1836714c54170",
+  "git_dirty": true,
+  "parameter_count": 410928,
+  "trainable_parameter_count": 410928,
+  "num_workers": 2,
+  "batch_size": 64,
+  "batches_per_epoch": 446,
+  "grad_clip": 3.0,
+  "lr_schedule": {
+    "type": "CyclicLR",
+    "base_lrs": [
+      1e-07
+    ],
+    "max_lrs": [
+      0.001
+    ],
+    "total_size": 892.0,
+    "step_size_up": 446,
+    "mode": "triangular"
+  },
+  "dataset_size": 28539,
+  "num_speakers": 251
+}

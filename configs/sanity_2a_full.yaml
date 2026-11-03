@@ -1,0 +1,73 @@
+# Configuration for Phase 2A Sanity Run C: Full 251 Speakers (10 epochs)
+# Model: small_tdnn_se (0.411M params)
+# Loss: AAMSoftmax (num_classes=251, s=30, m=0.2, fp32)
+# LR: CyclicLR 1e-7 -> 1e-3, 2-epoch cycle (step_size_up=446 steps)
+# Batch size: B=64 distinct speakers per batch
+# Epoch size: 446 batches per epoch (per ADR-016)
+# Augmentations: speed=True, noise=True, specaug=True, rir=False (explicitly OFF per prompt)
+# Evaluation: full-utterance dev-clean EER and train-probe (training-data) EER every epoch
+
+project:
+  name: "neurovox"
+  description: "Phase 2A Sanity Run C: Full 251 speakers, 10 epochs"
+
+hardware:
+  device: "mps"
+  num_workers: 2
+  pin_memory: false
+
+audio:
+  sampling_rate: 16000
+  n_mels: 80
+  win_length_ms: 25.0
+  hop_length_ms: 10.0
+  segment_frames: 180
+
+augmentation:
+  speed_perturbation:
+    enabled: true
+    factors: [0.95, 1.0, 1.05]
+  rirs_noises:
+    enabled: false
+  synthetic_noise:
+    enabled: true
+    babble_prob: 0.4
+    babble_snr_range: [10.0, 20.0]
+    gaussian_prob: 0.3
+    gaussian_snr_range: [5.0, 15.0]
+  specaugment:
+    enabled: true
+    freq_mask_param: 10
+    time_mask_param: 15
+
+model:
+  name: "small_tdnn_se"
+  channels: 128
+  emb_dim: 192
+
+loss:
+  name: "aam_softmax"
+  num_classes: 251
+  scale: 30.0
+  margin: 0.2
+
+training:
+  batch_size: 64
+  batches_per_epoch: 446
+  epochs: 10
+  lr_schedule: "cyclic"
+  cycle_epochs: 2
+  lr_init: 1.0e-7
+  lr_max: 1.0e-3
+  weight_decay: 1.0e-4
+  grad_clip: 3.0
+  eval_interval: 1
+  seed: 42
+
+evaluation:
+  eval_dev: true
+  eval_train_probe: true
+
+data:
+  train_manifest: "data/manifests/train-clean-100.csv"
+

@@ -1,0 +1,38 @@
+[
+  {
+    "epoch": 1,
+    "train_loss": 8.7093,
+    "train_acc": 26.04,
+    "train_sec": 18.8,
+    "lr": 0.001,
+    "grad_norm": 26.9253,
+    "eval_sec": 54.01,
+    "dev_eer_pct": 26.16,
+    "dev_mindcf_05": 0.8858,
+    "train_probe_eer_pct": null
+  },
+  {
+    "epoch": 2,
+    "train_loss": 5.1842,
+    "train_acc": 65.19,
+    "train_sec": 17.64,
+    "lr": 1e-07,
+    "grad_norm": 20.6568,
+    "eval_sec": 9.91,
+    "dev_eer_pct": 20.58,
+    "dev_mindcf_05": 0.8055,
+    "train_probe_eer_pct": null
+  },
+  {
+    "epoch": 3,
+    "train_loss": 3.6097,
+    "train_acc": 78.12,
+    "train_sec": 17.84,
+    "lr": 0.001,
+    "grad_norm": 21.4198,
+    "eval_sec": 9.75,
+    "dev_eer_pct": 23.35,
+    "dev_mindcf_05": 0.8094,
+    "train_probe_eer_pct": null
+  }
+]
