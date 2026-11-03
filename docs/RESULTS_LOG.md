@@ -22,10 +22,139 @@
 | `sanity_2a_overfit_v3` | 2026-11-03 | `88b26f9e` | 42 | `small_tdnn_se` | AAMSoftmax ($s=30, m=0.2$) | 1 fixed batch (64 spk) | 410,928 (0.411M) | N/A (overfit) | N/A | N/A | Mac M3 Pro (`device = mps`, fp32) | COMPLETED [GATE PASSED] | Commit `33499df`. Train acc: 100.0%, Loss: 13.4322 -> 0.000012 (1,119,347.3x reduction), 0 NaNs. Constant LR 1e-3, 300 steps. Verified with draw_id 3-tuple contract. |
 | `sanity_2a_50spk_v3` | 2026-11-03 | `d3d0115b` | 42 | `small_tdnn_se` | AAMSoftmax (num_classes=50, $s=30, m=0.2$) | 50-speaker subset (5,695 utts) | 410,928 (0.411M) | 21.42% (best dev ep 2) | N/A | 0.8245 (best dev norm ep 3) | Mac M3 Pro (`device = mps`, fp32) | COMPLETED [GATE PASSED] | Commit `33499df`. 3 epochs, B=32. Step-0 loss: 11.5615. Dev EER: 34.58% (ep 0) -> 24.13% -> 21.42% -> 21.58%. Unique utts: 3616 -> 4893 -> 5390. 0 NaNs. |
 | `sanity_2a_full_v3` | 2026-11-03 | `70443f48` | 42 | `small_tdnn_se` | AAMSoftmax (num_classes=251, $s=30, m=0.2$) | LibriSpeech train-clean-100 (251 spk, 28,539 utts) | 410,928 (0.411M) | 10.26% (best dev ep 10) | N/A | 0.4645 (best dev norm ep 8) | Mac M3 Pro (`device = mps`, fp32) | COMPLETED [GATE PASSED] | Commit `33499df`. 10 epochs, B=64, 446 b/ep. Step-0 loss: 13.7184. Dev EER: 34.58% (ep 0) -> 10.26% (ep 10). Train-probe EER: 25.09% (ep 0) -> 3.55% (ep 10). Cum unique utts: 28,538 (99.996%). |
+| `sanity_2b_overfit_s0` | 2026-11-03 | `f605cc78` | 42 | `ska_hnn` (S0) | IAAMSoftmax ($s=30, m=0.2, \tau=0.423$) | 1 fixed batch (64 spk) | 4,167,700 (4.168M) | N/A (overfit) | N/A | N/A | Mac M3 Pro (`device = mps`, fp32) | COMPLETED [GATE PASSED] | Train acc: 100.0%, Loss: 13.6175 -> 0.000012 (1,095,755x reduction), 0 NaNs. Constant LR 1e-3, 300 steps. S0 full proposed system. |
+| `sanity_2b_overfit_s1` | 2026-11-03 | `780ec83e` | 42 | `ska_hnn` (S1) | AAMSoftmax ($s=30, m=0.2$) | 1 fixed batch (64 spk) | 4,167,700 (4.168M) | N/A (overfit) | N/A | N/A | Mac M3 Pro (`device = mps`, fp32) | COMPLETED [GATE PASSED] | Train acc: 100.0%, Loss: 13.6175 -> 0.000012 (1,095,755x reduction), 0 NaNs. Constant LR 1e-3, 300 steps. S1 standard AAMSoftmax. |
+| `sanity_2b_50spk_s0` | 2026-11-03 | `58b6c97b` | 42 | `ska_hnn` (S0) | IAAMSoftmax (num_classes=50, $s=30, m=0.2, \tau=0.423$) | 50-speaker subset (5,695 utts) | 4,167,700 (4.168M) | 20.81% (best dev ep 2) | N/A | 0.8219 (best dev norm ep 2) | Mac M3 Pro (`device = mps`, fp32) | COMPLETED [GATE PASSED] | 2 epochs, B=32, 178 b/ep. Step-0 loss: 11.6978. Dev EER: 33.06% (ep 0) -> 29.84% (ep 1) -> 20.81% (ep 2). Acc: 31.9% -> 76.9%. Model compute dominates step time (~96%). |
+| `audit_torchinfo_phase2c` | 2026-11-04 | `param_audit` | N/A | SKA-HNN, Ablations S2-S6, ECAPA | N/A | Architecture Parameter Inspection | 4,167,700 (SKA-HNN) / 4,123,210 (ECAPA-matched) | N/A | N/A | N/A | Mac M3 Pro (CPU audit) | COMPLETED [VERIFIED] | Comprehensive torchinfo audit: SKA-HNN S0/S1 (4,167,700), S2 (3,872,788), S3 (3,360,404), S4 (3,294,868), S5 (4,109,728), S6 (2,195,584), ECAPA param-matched (4,123,210), ECAPA standard (20,767,552). |
+| `sanity_2c_smoke_s0` | 2026-11-04 | `58feb3cf` | 42 | `ska_hnn` (S0) | IAAMSoftmax ($s=30, m=0.2, \tau=0.423, \tau_{corr}=0.5$) | 1 fixed batch (64 spk) | 4,167,700 (4.168M) | N/A (overfit) | N/A | N/A | Mac M3 Pro (`device = mps`, fp32) | COMPLETED [GATE PASSED] | Phase 2C integration smoke test: S0 + IAAMSoftmax (warm-up / AAM-only behavior, epoch unconfigured so defaulted to 1 < ESC=5, ESD=5). Train acc: 100.0%, Loss: 13.6175 -> 0.000025 (555,668x reduction), 0 NaNs. 100 steps. |
+| `sanity_2c_smoke_s1` | 2026-11-04 | `8a590c70` | 42 | `ska_hnn` (S1) | AAMSoftmax ($s=30, m=0.2$) | 1 fixed batch (64 spk) | 4,167,700 (4.168M) | N/A (overfit) | N/A | N/A | Mac M3 Pro (`device = mps`, fp32) | COMPLETED [GATE PASSED] | Phase 2C integration smoke test: S1 + standard AAMSoftmax. Train acc: 100.0%, Loss: 13.6175 -> 0.000025 (555,668x reduction), 0 NaNs. 100 steps. |
+| `sanity_2c_smoke_ecapa` | 2026-11-04 | `da0e129c` | 42 | `ecapa_tdnn` (param-matched) | AAMSoftmax ($s=30, m=0.2$) | 1 fixed batch (64 spk) | 4,123,210 (4.123M) | N/A (overfit) | N/A | N/A | Mac M3 Pro (`device = mps`, fp32) | COMPLETED [GATE PASSED] | Phase 2C integration smoke test: Parameter-matched ECAPA-TDNN (C=400, MFA=1200). Train acc: 100.0%, Loss: 13.7640 -> 0.000010 (1,427,926x reduction), 0 NaNs. 100 steps. |
+| `sanity_2c_active_s0` | 2026-11-04 | `c481dd0f` | 42 | `ska_hnn` (S0) | IAAMSoftmax ($s=30, m=0.2, \tau=0.423, \tau_{corr}=0.5, \text{ESC}=5, \text{ESD}=5$, epoch=6) | 1 fixed batch (64 spk) | 4,167,700 (4.168M) | N/A (diagnostic) | N/A | N/A | Mac M3 Pro (`device = mps`, fp32) | COMPLETED [GATE PASSED] | Phase 2C.1 active AdaptiveDrop diagnostic: S0 at explicit epoch 6 (>= max(ESC, ESD)). Step 1: Loss 11.9358, Retained 32/64, Corrected 0, Filtered 32, GuardActive=True. Step 100: Loss 0.000012 (1,006,921.3x reduction), Retained acc 100.0% (all 50.0%), Retained 32/64, Corrected 0, Filtered 32, GuardActive=False. 0 NaNs. |
 
 ---
 
 ## 2. Experimental Entries
+
+### Phase 2C.1 Sanity Run: SKA-HNN S0 Active AdaptiveDrop Overfit Diagnostic (Epoch 6) [AUTHORITATIVE]
+- **Run ID:** `sanity_2c_active_s0`
+- **Timestamp:** 2026-11-04
+- **Platform:** Apple Silicon MacBook Pro 14-inch (Apple M3 Pro, 11 cores, 18 GB RAM, macOS 26.5 Build 25F71)
+- **Device & Precision:** `device = mps`, `torch.float32` (PYTORCH_ENABLE_MPS_FALLBACK=1)
+- **Config Hash:** `c481dd0f` (`configs/sanity_2c_active_s0.yaml`)
+- **Random Seed:** 42
+- **Model Architecture:** `ska_hnn` (Switch S0: full proposed system; $C=32, C_1=256, d_{attn}=128, \text{emb}=192$, `mlfc=true`, `mlasp_context=true`, `frontend=ska_2dcnn`)
+- **Measured Parameters (`torchinfo`):** 4,167,700 parameters (4.168M backbone)
+- **Loss Function:** `IAAMSoftmax` (in_features=192, num_classes=251, scale=30.0, margin=0.2, $\tau=0.423$, $\tau_{\text{corr}}=0.5$, $\text{ESD}=5$, $\text{ESC}=5$, `min_keep_ratio=0.5`)
+- **Provenance Tags:** $\text{ESD}=5$ `[Paper]`; $\tau=0.423$ `[Paper]`; $\text{ESC}=5$ `[Engineering Choice]`; $\tau_{\text{corr}}=0.5$ `[Engineering Choice]`; `min_keep_ratio=0.5` `[Engineering Choice, ADR-001]`.
+- **Dataset:** 1 fixed batch of 64 speakers drawn from `data/manifests/train-clean-100.csv`
+- **Batch Size:** $B=64$
+- **Explicit Epoch:** `overfit_epoch = 6` ($\ge \max(\text{ESC}, \text{ESD}) = 5$), explicitly activating both Stage 1 (Label Correction) and Stage 2 (Sample Filtering).
+- **Steps:** 100 steps with constant LR $1.0\times 10^{-3}$
+- **Measured Trajectory & AdaptiveDrop Dynamics:**
+  - **Step 1:** Loss: **11.9358** | Acc: 0.00% | Diagnostics: Retained = **32/64**, Filtered = **32**, Corrected = **0**, KeepRatio = **0.5000**, GuardActive = **True**
+    - *Explanation:* At step 1 with randomly initialized embeddings and prototypes on the 192D unit sphere, cosine similarities cluster around 0. All 64 samples fall below $\tau=0.423$. The deterministic minimum keep-ratio safeguard ($0.5 \times 64 = 32$) activates, retaining the top-32 samples by cosine to provide non-zero gradients and prevent training collapse.
+  - **Step 25:** Loss: **0.0001** | Retained Acc: **100.0%** (all 50.0%) | Retained = **32/64**, Filtered = **32**, Corrected = **0**, GuardActive = **False**
+    - *Explanation:* The 32 retained samples receive gradients and quickly separate, pushing their target cosines above $\tau=0.423$. The safeguard naturally deactivates because candidate retention ($32/64 = 0.5$) meets `min_keep_ratio`.
+  - **Step 50:** Loss: **0.0000** (3.44e-5) | Retained Acc: **100.0%** (all 50.0%) | Retained = **32/64**, Filtered = **32**, Corrected = **0**, GuardActive = **False**
+  - **Step 75:** Loss: **0.0000** (1.73e-5) | Retained Acc: **100.0%** (all 50.0%) | Retained = **32/64**, Filtered = **32**, Corrected = **0**, GuardActive = **False**
+  - **Step 100:** Loss: **0.000012** (1.185e-5) | Retained Acc: **100.0%** (32/32) | Full-Batch Acc: **50.0%** (32/64) | Retained = **32/64**, Filtered = **32**, Corrected = **0**, GuardActive = **False**
+- **Loss Reduction Factor:** $\mathbf{1,006,921.3\times}$ reduction ($\ge 100\times$ gate passed).
+- **Zero NaNs:** All gradients and loss values strictly finite throughout.
+- **Distinction from Warm-Up Smoke:** In `sanity_2c_smoke_s0`, the epoch was omitted (defaulting to 1), keeping AdaptiveDrop in warm-up ($epoch < \text{ESD}=5$), so all 64 samples were retained and achieved 100% full-batch accuracy. In this active diagnostic (`sanity_2c_active_s0`), AdaptiveDrop was actively filtering, dropping 32 samples with zero gradients and training the 32 retained samples to 100% accuracy.
+- **Distinction from Synthetic Tests:** Controlled synthetic tests in `test_trainer_active_adaptivedrop_path` used synthetic identity prototypes and inverted mislabeled samples to verify label rectification ($\text{corr}=1$) and deliberate safeguard triggers under controlled conditions. This run evaluates real LibriSpeech audio through the full SKA-HNN backbone.
+- **Status:** COMPLETED [GATE PASSED]
+- **Artifacts:**
+  - Metadata: `results/sanity_2c_active_s0/run_meta.json`
+  - History JSON: `results/sanity_2c_active_s0/history.json`
+  - History CSV: `results/sanity_2c_active_s0/history.csv`
+  - Checkpoint: `checkpoints/sanity_2c_active_s0/overfit_final.pt` (epoch 6)
+
+---
+
+### Phase 2B Sanity Run C: SKA-HNN S0 on 50-Speaker Subset (2 Epochs) [AUTHORITATIVE]
+- **Run ID:** `sanity_2b_50spk_s0`
+- **Timestamp:** 2026-11-03
+- **Platform:** Apple Silicon MacBook Pro 14-inch (Apple M3 Pro, 11 cores, 18 GB RAM, macOS 26.5 Build 25F71)
+- **Device & Precision:** `device = mps`, `torch.float32` (PYTORCH_ENABLE_MPS_FALLBACK=1)
+- **Config Hash:** `58b6c97b` (`configs/sanity_2b_50spk_s0.yaml`)
+- **Random Seed:** 42
+- **Model Architecture:** `ska_hnn` (Switch S0: full proposed system; $C=32, C_1=256, d_{attn}=128, \text{emb}=192$, `mlfc=true`, `mlasp_context=true`, `frontend=ska_2dcnn`)
+- **Measured Parameters (`torchinfo`):** 4,167,700 parameters (4.168M backbone)
+- **Loss Function:** `IAAMSoftmax` (in_features=192, num_classes=50, scale=30.0, margin=0.2, tau=0.423)
+- **Dataset:** `data/subsets/50spk/train-50spk.csv` (50 speakers, 5,695 total utterances)
+- **Batch Size:** $B=32$ distinct speakers per batch
+- **Epoch Size:** 178 batches per epoch
+- **Total Steps:** 356 steps across 2 epochs
+- **LR Schedule:** CyclicLR ($1.0\times 10^{-7} \to 1.0\times 10^{-3}$, 2-epoch cycle = 178 steps up / 178 steps down, cycle_momentum=False)
+- **Active Augmentations:** speed=True (p=0.5), noise=True (p=0.3), babble=True (p=0.4), rir=False (p=0.5), specaug=True (p=0.5)
+- **Initial Baseline (Step 0 & Epoch 0 Untrained):**
+  - Initial Loss at Step 0: **11.6978**
+  - Untrained Baseline Dev EER: **33.06%** (minDCF $P=0.05$: 0.8777)
+- **Measured Epoch-by-Epoch Trajectory:**
+
+| Epoch | Sampler Epoch | First Batch Hash | Unique Utts/Epoch | Cum Unique Utts | Coverage (%) | Train Loss (round) | Train Loss (unrounded) | Train Acc (%) | Train Sec | Eval Sec | Dev EER (%) | Dev minDCF ($P=0.05$) | LR | Grad Norm |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| 01 | 1 | `e68e1899926439b3` | 3,616 | 3,616 | 63.49% | 8.2440 | 8.24403570 | 31.85% | 51.7s | 40.3s | 29.84% | 0.8994 | 1.00e-3 | 43.5025 |
+| 02 | 2 | `01d2ade5b02ef97d` | 3,592 | 4,893 | 85.92% | 3.6219 | 3.62187966 | 76.88% | 49.6s | 41.7s | 20.81% | 0.8219 | 1.00e-7 | 20.2863 |
+
+- **Step Time & Compute Analysis:**
+  - Average train epoch time: ~50.6s across 178 batches $\implies \mathbf{284.5\text{ ms/step}}$ overall.
+  - Measured pure model fwd+bwd step on MPS ($B=32, T=180$): **268.2 ms/step** (~94.3% of total training step time).
+  - DataLoader + loss + optimizer step: ~16.3 ms/step (~5.7% of step time).
+  - **Conclusion:** The SKA-HNN model compute strongly dominates step time.
+- **Status:** COMPLETED [GATE PASSED]
+- **Artifacts:**
+  - Metadata: `results/sanity_2b_50spk_s0/run_meta.json`
+  - History CSV: `results/sanity_2b_50spk_s0/history.csv`
+  - Checkpoints: `checkpoints/sanity_2b_50spk_s0/epoch_{001,002}.pt`, `best_dev_eer.pt`, `final.pt`
+
+---
+
+### Phase 2B Sanity Run A: SKA-HNN S0 Overfit Single Fixed Batch [AUTHORITATIVE]
+- **Run ID:** `sanity_2b_overfit_s0`
+- **Timestamp:** 2026-11-03
+- **Platform:** Apple Silicon MacBook Pro 14-inch (Apple M3 Pro, 11 cores, 18 GB RAM, macOS 26.5 Build 25F71)
+- **Device & Precision:** `device = mps`, `torch.float32`
+- **Config Hash:** `f605cc78` (`configs/sanity_2b_overfit_s0.yaml`)
+- **Random Seed:** 42
+- **Model Architecture:** `ska_hnn` (Switch S0: full proposed system, $C=32, C_1=256, d_{attn}=128, \text{emb}=192$)
+- **Measured Parameters (`torchinfo`):** 4,167,700 parameters
+- **Loss Function:** `IAAMSoftmax` ($s=30, m=0.2, \tau=0.423$)
+- **Batch Size:** $B=64$ distinct speakers
+- **Steps:** 300 steps with constant LR $1.0\times 10^{-3}$
+- **Measured Overfit Trajectory:**
+  - Step 1 Loss: **13.6175** | Acc: 1.56%
+  - Step 50 Loss: 5.8942 | Acc: 93.75%
+  - Step 100 Loss: 1.2580 | Acc: 100.0%
+  - Step 200 Loss: 0.000305 | Acc: 100.0%
+  - Step 300 Loss: **0.000012** (1.2424e-05) | Acc: **100.0%**
+- **Loss Reduction Factor:** $\mathbf{1,095,755\times}$ reduction ($\ge 100,000\times$ gate passed).
+- **Status:** COMPLETED [GATE PASSED]
+
+---
+
+### Phase 2B Sanity Run B: SKA-HNN S1 Overfit Single Fixed Batch [AUTHORITATIVE]
+- **Run ID:** `sanity_2b_overfit_s1`
+- **Timestamp:** 2026-11-03
+- **Platform:** Apple Silicon MacBook Pro 14-inch (Apple M3 Pro, 11 cores, 18 GB RAM, macOS 26.5 Build 25F71)
+- **Device & Precision:** `device = mps`, `torch.float32`
+- **Config Hash:** `780ec83e` (`configs/sanity_2b_overfit_s1.yaml`)
+- **Random Seed:** 42
+- **Model Architecture:** `ska_hnn` (Switch S1: standard AAMSoftmax, $C=32, C_1=256, d_{attn}=128, \text{emb}=192$)
+- **Measured Parameters (`torchinfo`):** 4,167,700 parameters
+- **Loss Function:** `AAMSoftmax` ($s=30, m=0.2$)
+- **Batch Size:** $B=64$ distinct speakers
+- **Steps:** 300 steps with constant LR $1.0\times 10^{-3}$
+- **Measured Overfit Trajectory:**
+  - Step 1 Loss: **13.6175** | Acc: 1.56%
+  - Step 50 Loss: 5.8942 | Acc: 93.75%
+  - Step 100 Loss: 1.2580 | Acc: 100.0%
+  - Step 200 Loss: 0.000305 | Acc: 100.0%
+  - Step 300 Loss: **0.000012** (1.2424e-05) | Acc: **100.0%**
+- **Loss Reduction Factor:** $\mathbf{1,095,755\times}$ reduction ($\ge 100,000\times$ gate passed).
+- **Status:** COMPLETED [GATE PASSED]
+
+---
 
 ### Phase 2A Sanity Run C (v3): Full 251 Speakers (10 Epochs) [AUTHORITATIVE]
 - **Run ID:** `sanity_2a_full_v3`

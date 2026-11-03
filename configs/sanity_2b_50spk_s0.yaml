@@ -1,0 +1,75 @@
+# Configuration for Phase 2B Sanity Run: 50-Speaker Subset (2 epochs, S0)
+# Model: ska_hnn (S0: C=32, C1=256, 4.168M params)
+# Loss: AAMSoftmax (num_classes=50, s=30, m=0.2, fp32)
+# LR: CyclicLR 1e-7 -> 1e-3, 2-epoch cycle (178 steps up / 178 steps down)
+# Batch size: B=32 (deliberate deviation from ADR-016: 50 speakers cannot fill B=64)
+# Epoch: One pass over subset utterances (178 batches)
+# Augmentations: speed=True, noise=True, specaug=True, rir=False (explicitly OFF)
+
+project:
+  name: "neurovox"
+  description: "Phase 2B Sanity: 50-speaker subset, 2 epochs (S0)"
+
+hardware:
+  device: "mps"
+  num_workers: 2
+  pin_memory: false
+
+audio:
+  sampling_rate: 16000
+  n_mels: 80
+  win_length_ms: 25.0
+  hop_length_ms: 10.0
+  segment_frames: 180
+
+augmentation:
+  speed_perturbation:
+    enabled: true
+    factors: [0.95, 1.0, 1.05]
+  rirs_noises:
+    enabled: false
+  synthetic_noise:
+    enabled: true
+    babble_prob: 0.4
+    babble_snr_range: [10.0, 20.0]
+    gaussian_prob: 0.3
+    gaussian_snr_range: [5.0, 15.0]
+  specaugment:
+    enabled: true
+    freq_mask_param: 10
+    time_mask_param: 15
+
+model:
+  name: "ska_hnn"
+  switch: "S0"
+  c_cnn: 32
+  c_tdnn: 256
+  emb_dim: 192
+  attn_dim: 128
+  ls_window: 21
+
+loss:
+  name: "aam_softmax"
+  num_classes: 50
+  scale: 30.0
+  margin: 0.2
+
+training:
+  batch_size: 32
+  epochs: 2
+  lr_schedule: "cyclic"
+  cycle_epochs: 2
+  lr_init: 1.0e-7
+  lr_max: 1.0e-3
+  weight_decay: 1.0e-4
+  grad_clip: 3.0
+  eval_interval: 1
+  seed: 42
+
+evaluation:
+  eval_dev: true
+  eval_train_probe: false
+
+data:
+  train_manifest: "data/manifests/train-50spk.csv"
+

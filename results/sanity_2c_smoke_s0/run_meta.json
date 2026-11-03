@@ -1,0 +1,36 @@
+{
+  "run_id": "sanity_2c_smoke_s0",
+  "config_hash": "58feb3cf",
+  "seed": 42,
+  "device": "mps",
+  "precision": "fp32",
+  "augmentation_flags": {
+    "speed": false,
+    "noise": false,
+    "babble": false,
+    "rir": false,
+    "specaug": false
+  },
+  "augmentation_probabilities": {
+    "speed": 0.0,
+    "noise": 0.0,
+    "babble": 0.0,
+    "rir": 0.0,
+    "specaug": 0.0
+  },
+  "torch_version": "2.14.1",
+  "git_sha": "e52f3b72517fc0453ffb3acad31d3db10009d258",
+  "git_dirty": true,
+  "parameter_count": 4167700,
+  "trainable_parameter_count": 4167700,
+  "num_workers": 0,
+  "batch_size": 64,
+  "batches_per_epoch": 446,
+  "grad_clip": 3.0,
+  "lr_schedule": {
+    "type": "constant",
+    "lr": 0.001
+  },
+  "dataset_size": 28539,
+  "num_speakers": 251
+}

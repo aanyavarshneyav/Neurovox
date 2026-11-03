@@ -29,8 +29,14 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from src.data.dataset import LibriSpeechDataset
 from src.data.sampler import SpeakerBalancedBatchSampler
-from src.losses.aam_softmax import AAMSoftmax
-from src.models.small_tdnn_se import small_tdnn_se
+from src.losses import AAMSoftmax, IAAMSoftmax
+from src.models import (
+    ECAPATDNN,
+    build_ska_hnn_from_config,
+    ecapa_tdnn_param_matched,
+    ecapa_tdnn_standard,
+    small_tdnn_se,
+)
 from src.training.trainer import Trainer, find_latest_checkpoint
 from src.utils.paths import get_ckpt_root, get_data_root, get_results_root, resolve_path
 
@@ -251,21 +257,66 @@ def main() -> int:
         pin_memory=bool(cfg.hardware.get("pin_memory", False)),
     )
 
-    # Model: small_tdnn_se
-    in_features = int(cfg.audio.get("n_mels", 80))
-    channels = int(cfg.model.get("channels", 128))
+    # Model instantiation keyed on cfg.model.name
+    model_name = cfg.model.get("name", "small_tdnn_se")
     emb_dim = int(cfg.model.get("emb_dim", 192))
-    model = small_tdnn_se(in_features=in_features, channels=channels, emb_dim=emb_dim).to(device)
+    if model_name == "small_tdnn_se":
+        in_features = int(cfg.audio.get("n_mels", 80))
+        channels = int(cfg.model.get("channels", 128))
+        model = small_tdnn_se(in_features=in_features, channels=channels, emb_dim=emb_dim).to(device)
+    elif model_name == "ska_hnn":
+        model = build_ska_hnn_from_config(cfg).to(device)
+    elif model_name in {"ecapa_tdnn", "ecapa"}:
+        in_features = int(cfg.audio.get("n_mels", 80))
+        variant = str(cfg.model.get("variant", "param_matched")).lower()
+        if variant == "standard":
+            model = ecapa_tdnn_standard(in_features=in_features, emb_dim=emb_dim).to(device)
+        else:
+            channels = cfg.model.get("channels", 400)
+            if isinstance(channels, list):
+                channels = [int(c) for c in channels]
+            else:
+                channels = int(channels)
+            model = ECAPATDNN(
+                in_features=in_features,
+                channels=channels,
+                emb_dim=emb_dim,
+            ).to(device)
+    else:
+        raise ValueError(f"Unknown model architecture: '{model_name}'")
 
-    # Loss: AAMSoftmax
+    # Loss instantiation
+    loss_name = str(cfg.loss.get("name", "aam_softmax")).lower()
     scale = float(cfg.loss.get("scale", 30.0))
     margin = float(cfg.loss.get("margin", 0.2))
-    loss_fn = AAMSoftmax(
-        in_features=emb_dim,
-        num_classes=num_classes,
-        scale=scale,
-        margin=margin,
-    ).to(device)
+
+    if loss_name == "iaam_softmax":
+        ad_cfg = cfg.loss.get("adaptive_drop", {})
+        tau = float(cfg.loss.get("tau", ad_cfg.get("tau", 0.423)))
+        tau_corr = float(cfg.loss.get("tau_corr", ad_cfg.get("correction_tau", 0.5)))
+        esd = int(cfg.loss.get("esd", ad_cfg.get("warmup_epochs", 5)))
+        esc = int(cfg.loss.get("esc", ad_cfg.get("esc_epochs", 5)))
+        min_keep_ratio = float(cfg.loss.get("min_keep_ratio", ad_cfg.get("min_keep_ratio", 0.5)))
+        loss_fn = IAAMSoftmax(
+            in_features=emb_dim,
+            num_classes=num_classes,
+            scale=scale,
+            margin=margin,
+            tau=tau,
+            tau_corr=tau_corr,
+            esd=esd,
+            esc=esc,
+            min_keep_ratio=min_keep_ratio,
+        ).to(device)
+    elif loss_name == "aam_softmax":
+        loss_fn = AAMSoftmax(
+            in_features=emb_dim,
+            num_classes=num_classes,
+            scale=scale,
+            margin=margin,
+        ).to(device)
+    else:
+        raise ValueError(f"Unknown loss architecture: '{loss_name}'. Expected 'iaam_softmax' or 'aam_softmax'.")
 
     # Optimizer
     weight_decay = float(cfg.training.get("weight_decay", 1e-4))
@@ -341,7 +392,10 @@ def main() -> int:
 
     if cfg.training.get("overfit_batch", False):
         steps = int(cfg.training.get("overfit_steps", 300))
-        trainer.fit_overfit_batch(num_steps=steps)
+        overfit_epoch = cfg.training.get("overfit_epoch", None)
+        if overfit_epoch is not None:
+            overfit_epoch = int(overfit_epoch)
+        trainer.fit_overfit_batch(num_steps=steps, epoch=overfit_epoch)
         return 0
 
     eval_interval = int(cfg.training.get("eval_interval", 1))

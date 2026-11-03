@@ -1,0 +1,60 @@
+# Configuration for Phase 2B Sanity Run: Overfit Single Fixed Batch (S1)
+# Model: ska_hnn (S1: AAMSoftmax baseline architecture, C=32, C1=256)
+# Loss: AAMSoftmax (s=30, m=0.2, fp32)
+# LR: constant 1e-3, 300 steps
+# Augmentation: fully OFF
+
+project:
+  name: "neurovox"
+  description: "Phase 2B Sanity: Overfit Fixed Batch (S1)"
+
+hardware:
+  device: "mps"
+  num_workers: 0
+  pin_memory: false
+
+audio:
+  sampling_rate: 16000
+  n_mels: 80
+  win_length_ms: 25.0
+  hop_length_ms: 10.0
+  segment_frames: 180
+
+augmentation:
+  speed_perturbation:
+    enabled: false
+  rirs_noises:
+    enabled: false
+  synthetic_noise:
+    enabled: false
+  specaugment:
+    enabled: false
+
+model:
+  name: "ska_hnn"
+  switch: "S1"
+  c_cnn: 32
+  c_tdnn: 256
+  emb_dim: 192
+  attn_dim: 128
+  ls_window: 21
+
+loss:
+  name: "aam_softmax"
+  num_classes: 251
+  scale: 30.0
+  margin: 0.2
+
+training:
+  batch_size: 64
+  overfit_batch: true
+  overfit_steps: 300
+  lr_schedule: "constant"
+  lr_max: 1.0e-3
+  weight_decay: 1.0e-4
+  grad_clip: 3.0
+  seed: 42
+
+data:
+  train_manifest: "data/manifests/train-clean-100.csv"
+

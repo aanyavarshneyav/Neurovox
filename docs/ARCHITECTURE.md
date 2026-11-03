@@ -41,29 +41,29 @@ Tags follow [PROJECT_SPEC.md](PROJECT_SPEC.md). Shapes and dimensions come from 
 | Stage | Module Name | Input Shape `(B, ...)` | Internal Layers & Operations | Output Shape `(B, ...)` | Parameter Count (Full Scale) | Parameter Count (Scaled Project) |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **0. Acoustic Frontend** | Mel-Filterbank + SpecAugment | `(B, 1, 80, T)` | 80 Mels, 25ms win, 10ms hop; time/freq masking, speed perturbation, synthetic noise / RIR | `(B, 1, 80, T)` | Non-parametric | Non-parametric |
-| **1. 2D-CNN Frontend** | Preceding Conv2d Block | `(B, 1, 80, T)` | $\text{Conv2d}(1, C, k=3, s=(2,1), p=1) \to \text{ReLU} \to \text{BN2d}(C)$ | `(B, C, 40, T)` | TBD: measure with torchinfo | TBD: measure with torchinfo |
-| **1. 2D-CNN Frontend** | SKA ResBlock 1 | `(B, C, 40, T)` | $\text{Conv2d}(C, C, 3, s=1, p=1) \to \text{fwSKA} \to \text{cwSKA} \to \text{SE}(r=8) + \text{Skip}$ | `(B, C, 40, T)` | TBD: measure with torchinfo | TBD: measure with torchinfo |
-| **1. 2D-CNN Frontend** | SKA ResBlock 2 | `(B, C, 40, T)` | Identical topology to ResBlock 1 | `(B, C, 40, T)` | TBD: measure with torchinfo | TBD: measure with torchinfo |
-| **1. 2D-CNN Frontend** | Succeeding Conv2d Block | `(B, C, 40, T)` | $\text{Conv2d}(C, C, k=3, s=(2,1), p=1) \to \text{ReLU} \to \text{BN2d}(C)$ | `(B, C, 20, T)` | TBD: measure with torchinfo | TBD: measure with torchinfo |
+| **1. 2D-CNN Frontend** | Preceding Conv2d Block | `(B, 1, 80, T)` | $\text{Conv2d}(1, C, k=3, s=(2,1), p=1) \to \text{ReLU} \to \text{BN2d}(C)$ | `(B, C, 40, T)` | 1,408 | 352 |
+| **1. 2D-CNN Frontend** | SKA ResBlock 1 | `(B, C, 40, T)` | $\text{Conv2d}(C, C, 3, s=1, p=1) \to \text{fwSKA} \to \text{cwSKA} \to \text{SE}(r=8) + \text{Skip}$ | `(B, C, 40, T)` | 749,778 | 47,802 |
+| **1. 2D-CNN Frontend** | SKA ResBlock 2 | `(B, C, 40, T)` | Identical topology to ResBlock 1 | `(B, C, 40, T)` | 749,778 | 47,802 |
+| **1. 2D-CNN Frontend** | Succeeding Conv2d Block | `(B, C, 40, T)` | $\text{Conv2d}(C, C, k=3, s=(2,1), p=1) \to \text{ReLU} \to \text{BN2d}(C)$ | `(B, C, 20, T)` | 147,712 | 9,280 |
 | **1. 2D-CNN Frontend** | Frequency-Channel Flatten | `(B, C, 20, T)` | Reshape / flatten frequency and channel dimensions: $d_c = 20 \times C$ | `(B, d_c, T)` | Non-parametric | Non-parametric |
 | **2. TDNN-LSTM Module** | Local Statistics (LS) 1 | `(B, d_c, T)` | Sliding window ($W=21$) mean $\mu$ and std $\sigma$ in fp32 with replicate padding | `(B, 2*d_c, T)` | Non-parametric | Non-parametric |
 | **2. TDNN-LSTM Module** | LS Concatenation 1 | `(B, d_c, T)` & `(B, 2*d_c, T)` | Concatenate $[X_c; \mu_c; \sigma_c]$ along channel dimension | `(B, 3*d_c, T)` | Non-parametric | Non-parametric |
-| **2. TDNN-LSTM Module** | TDNN Layer | `(B, 3*d_c, T)` | $\text{Conv1d}(3d_c, C_1, k=3, p=1) \to \text{ReLU} \to \text{BN1d}(C_1)$ | `(B, C_1, T)` | TBD: measure with torchinfo | TBD: measure with torchinfo |
-| **2. TDNN-LSTM Module** | LSTM Layer | `(B, C_1, T)` | Unidirectional $\text{LSTM}(C_1, C_1, \text{num\_layers}=1)$ | `(B, C_1, T)` | TBD: measure with torchinfo | TBD: measure with torchinfo |
+| **2. TDNN-LSTM Module** | TDNN Layer | `(B, 3*d_c, T)` | $\text{Conv1d}(3d_c, C_1, k=3, p=1) \to \text{ReLU} \to \text{BN1d}(C_1)$ | `(B, C_1, T)` | 11,797,504 | 1,475,072 |
+| **2. TDNN-LSTM Module** | LSTM Layer | `(B, C_1, T)` | Unidirectional $\text{LSTM}(C_1, C_1, \text{num\_layers}=1) \to \text{ReLU} \to \text{BN1d}(C_1)$ | `(B, C_1, T)` | 2,102,272 | 526,848 |
 | **3. Fully-TDNN Module** | Local Statistics (LS) 2 | `(B, C_1, T)` | Sliding window ($W=21$) mean $\mu$ and std $\sigma$ in fp32 with replicate padding | `(B, 2*C_1, T)` | Non-parametric | Non-parametric |
 | **3. Fully-TDNN Module** | LS Concatenation 2 | `(B, C_1, T)` & `(B, 2*C_1, T)` | Concatenate $[X_l; \mu_l; \sigma_l]$ along channel dimension | `(B, 3*C_1, T)` | Non-parametric | Non-parametric |
-| **3. Fully-TDNN Module** | TDNN Layer 1 | `(B, 3*C_1, T)` | $\text{Conv1d}(3C_1, C_1, k=3, d=1, p=1) \to \text{ReLU} \to \text{BN1d}(C_1)$ | `(B, C_1, T)` | TBD: measure with torchinfo | TBD: measure with torchinfo |
-| **3. Fully-TDNN Module** | TDNN Layer 2 | `(B, C_1, T)` | $\text{Conv1d}(C_1, C_1, k=3, d=2, p=2) \to \text{ReLU} \to \text{BN1d}(C_1)$ | `(B, C_1, T)` | TBD: measure with torchinfo | TBD: measure with torchinfo |
-| **3. Fully-TDNN Module** | TDNN Layer 3 | `(B, C_1, T)` | $\text{Conv1d}(C_1, C_1, k=3, d=3, p=3) \to \text{ReLU} \to \text{BN1d}(C_1)$ | `(B, C_1, T)` | TBD: measure with torchinfo | TBD: measure with torchinfo |
+| **3. Fully-TDNN Module** | TDNN Layer 1 | `(B, 3*C_1, T)` | $\text{Conv1d}(3C_1, C_1, k=3, d=1, p=1) \to \text{ReLU} \to \text{BN1d}(C_1)$ | `(B, C_1, T)` | 2,360,320 | 590,336 |
+| **3. Fully-TDNN Module** | TDNN Layer 2 | `(B, C_1, T)` | $\text{Conv1d}(C_1, C_1, k=3, d=2, p=2) \to \text{ReLU} \to \text{BN1d}(C_1)$ | `(B, C_1, T)` | 787,456 | 197,120 |
+| **3. Fully-TDNN Module** | TDNN Layer 3 | `(B, C_1, T)` | $\text{Conv1d}(C_1, C_1, k=3, d=3, p=3) \to \text{ReLU} \to \text{BN1d}(C_1)$ | `(B, C_1, T)` | 787,456 | 197,120 |
 | **4. MLASP Module** | MLFC Concatenation | `(B, d_c, T)`, `(B, C_1, T)`, `(B, C_1, T)` | Concatenate $[X_c; X_l; X_t]$ along channel dimension: $d_i = d_c + 2C_1$ | `(B, d_i, T)` | Non-parametric | Non-parametric |
 | **4. MLASP Module** | Local Statistics (LS) 3 | `(B, d_i, T)` | Sliding window ($W=21$) mean $\mu$ and std $\sigma$ in fp32 with replicate padding | `(B, 2*d_i, T)` | Non-parametric | Non-parametric |
 | **4. MLASP Module** | Context Concatenation | `(B, d_i, T)` & `(B, 2*d_i, T)` | Concatenate $[X_i; \mu_i; \sigma_i]$ to form context tensor $X_i^c$ | `(B, 3*d_i, T)` | Non-parametric | Non-parametric |
-| **4. MLASP Module** | Channel Attention Scoring | `(B, 3*d_i, T)` | $\text{Conv1d}(3d_i, d_{attn}, 1) \to \text{Tanh} \to \text{BN1d}(d_{attn}) \to \text{Conv1d}(d_{attn}, d_i, 1) \to \text{Softmax}(T)$ | `(B, d_i, T)` | TBD: measure with torchinfo | TBD: measure with torchinfo |
+| **4. MLASP Module** | Channel Attention Scoring | `(B, 3*d_i, T)` | $\text{Conv1d}(3d_i, d_{attn}, 1) \to \text{Tanh} \to \text{BN1d}(d_{attn}) \to \text{Conv1d}(d_{attn}, d_i, 1) \to \text{Softmax}(T)$ | `(B, d_i, T)` | 3,679,488 | 591,360 |
 | **4. MLASP Module** | Weighted Stats Pooling | `(B, d_i, T)` & weights | Compute weighted mean $\tilde{\mu} = \sum_t \alpha_t x_t$ and weighted std $\tilde{\sigma} = \sqrt{\sum_t \alpha_t x_t^2 - \tilde{\mu}^2}$ | `(B, 2*d_i)` | Non-parametric | Non-parametric |
-| **4. MLASP Module** | Pooling BatchNorm | `(B, 2*d_i)` | $\text{BN1d}(2d_i)$ applied to pooled utterance representation | `(B, 2*d_i)` | TBD: measure with torchinfo | TBD: measure with torchinfo |
-| **5. Classifier / Head** | FC Layer 1 (primary embedding, `[Paper]`) | `(B, 2*d_i)` | $\text{Linear}(2d_i, 192) \to \text{BN1d}(192)$; paper: embeddings come from the FC layer closest to pooling | `(B, 192)` | TBD: measure with torchinfo | TBD: measure with torchinfo |
-| **5. Classifier / Head** | FC Layer 2 (diagnostic embedding, `[Engineering Choice]`) | `(B, 192)` | $\text{Linear}(192, 192) \to \text{BN1d}(192)$ | `(B, 192)` | TBD: measure with torchinfo | TBD: measure with torchinfo |
-| **5. Classifier / Head** | IAAMSoftmax Margin Loss | `(B, 192)` & labels | ArcFace margin projection ($s=30, m=0.2$) with AdaptiveDrop filtering ($\tau=0.423$) | `(B, N_c)` logits & scalar loss | TBD: measure with torchinfo | TBD: measure with torchinfo |
+| **4. MLASP Module** | Pooling BatchNorm | `(B, 2*d_i)` | $\text{BN1d}(2d_i)$ applied to pooled utterance representation | `(B, 2*d_i)` | 9,216 | 4,608 |
+| **5. Classifier / Head** | FC Layer 1 (primary embedding, `[Paper]`) | `(B, 2*d_i)` | $\text{Linear}(2d_i, 192) \to \text{BN1d}(192)$; paper: embeddings come from the FC layer closest to pooling | `(B, 192)` | 1,376,640 | 442,752 |
+| **5. Classifier / Head** | FC Layer 2 (diagnostic embedding, `[Engineering Choice]`) | `(B, 192)` | $\text{Linear}(192, 192) \to \text{BN1d}(192)$ | `(B, 192)` | 37,248 | 37,248 |
+| **5. Classifier / Head** | IAAMSoftmax Margin Loss | `(B, 192)` & labels | ArcFace margin projection ($s=30, m=0.2$) with AdaptiveDrop filtering ($\tau=0.423$) | `(B, N_c)` logits & scalar loss | Head prototypes: 1,150,848 (VoxCeleb 5994) | Head prototypes: 48,192 (LibriSpeech 251) |
 
 ---
 
@@ -104,14 +104,33 @@ Definitions S0–S6 and the parameter column are taken from Table II and the Sec
 
 | Switch ID | Architecture & Loss Configuration | Config Flag Mapping | Paper Description | Paper Params `[Paper, Table II]` | Measured Params (scaled) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **S0** | **Full Proposed System:** SKA-HNN + IAAMSoftmax | `loss: iaam_softmax`<br>`mlfc: true`<br>`mlasp_context: true`<br>`frontend: ska_2dcnn` | Full framework with 2D-CNN, MLFC, MLASP context, and IAAMSoftmax. | 30.91M | TBD: measure with torchinfo |
-| **S1** | **AAMSoftmax Only:** SKA-HNN + standard AAMSoftmax | `loss: aam_softmax`<br>`mlfc: true`<br>`mlasp_context: true`<br>`frontend: ska_2dcnn` | Same as S0, but utilizing standard AAMSoftmax (no AdaptiveDrop filtering/correction). | 30.91M | TBD: measure with torchinfo |
-| **S2** | **No MLASP Context:** S1 without context in MLASP | `loss: aam_softmax`<br>`mlfc: true`<br>`mlasp_context: false`<br>`frontend: ska_2dcnn` | Attention weights computed directly over $X_i \in \mathbb{R}^{d_i \times T}$ instead of $X_i^c \in \mathbb{R}^{3d_i \times T}$. | 29.16M | TBD: measure with torchinfo |
-| **S3** | **No MLFC:** S1 without multi-level feature combination | `loss: aam_softmax`<br>`mlfc: false`<br>`mlasp_context: true`<br>`frontend: ska_2dcnn` | $X_i = X_t \in \mathbb{R}^{C_1 \times T}$. MLASP receives only Fully-TDNN output and its local statistics. | 26.77M | TBD: measure with torchinfo |
-| **S4** | **No MLFC & No Context:** S1 without MLFC and without context | `loss: aam_softmax`<br>`mlfc: false`<br>`mlasp_context: false`<br>`frontend: ska_2dcnn` | $X_i = X_t \in \mathbb{R}^{C_1 \times T}$. MLASP applied directly on $X_t$ without local statistics. | 26.52M | TBD: measure with torchinfo |
-| **S5** | **Vanilla 2D-CNN:** S1 with standard Conv2d (no SKA) | `loss: aam_softmax`<br>`mlfc: true`<br>`mlasp_context: true`<br>`frontend: vanilla_2dcnn` | Replaces fwSKA + cwSKA inside ResBlocks with standard single-branch 2D convolutions. | 17.37M | TBD: measure with torchinfo |
-| **S6** | **No 2D-CNN Frontend:** S1 without any 2D-CNN module | `loss: aam_softmax`<br>`mlfc: true`<br>`mlasp_context: true`<br>`frontend: none` | Acoustic features feed directly into TDNN-LSTM. MLFC pools over $X_i = [X_l; X_t]$. | 6.34M | TBD: measure with torchinfo |
+| **S0** | **Full Proposed System:** SKA-HNN + IAAMSoftmax | `loss: iaam_softmax`<br>`mlfc: true`<br>`mlasp_context: true`<br>`frontend: ska_2dcnn` | Full framework with 2D-CNN, MLFC, MLASP context, and IAAMSoftmax. | 30.91M | **4,167,700** |
+| **S1** | **AAMSoftmax Only:** SKA-HNN + standard AAMSoftmax | `loss: aam_softmax`<br>`mlfc: true`<br>`mlasp_context: true`<br>`frontend: ska_2dcnn` | Same as S0, but utilizing standard AAMSoftmax (no AdaptiveDrop filtering/correction). | 30.91M | **4,167,700** |
+| **S2** | **No MLASP Context:** S1 without context in MLASP | `loss: aam_softmax`<br>`mlfc: true`<br>`mlasp_context: false`<br>`frontend: ska_2dcnn` | Attention weights computed directly over $X_i \in \mathbb{R}^{d_i \times T}$ instead of $X_i^c \in \mathbb{R}^{3d_i \times T}$. | 29.16M | **3,872,788** |
+| **S3** | **No MLFC:** S1 without multi-level feature combination | `loss: aam_softmax`<br>`mlfc: false`<br>`mlasp_context: true`<br>`frontend: ska_2dcnn` | $X_i = X_t \in \mathbb{R}^{C_1 \times T}$. MLASP receives only Fully-TDNN output and its local statistics. | 26.77M | **3,360,404** |
+| **S4** | **No MLFC & No Context:** S1 without MLFC and without context | `loss: aam_softmax`<br>`mlfc: false`<br>`mlasp_context: false`<br>`frontend: ska_2dcnn` | $X_i = X_t \in \mathbb{R}^{C_1 \times T}$. MLASP applied directly on $X_t$ without local statistics. | 26.52M | **3,294,868** |
+| **S5** | **Vanilla 2D-CNN:** S1 with standard Conv2d (no SKA) | `loss: aam_softmax`<br>`mlfc: true`<br>`mlasp_context: true`<br>`frontend: vanilla_2dcnn` | Replaces fwSKA + cwSKA inside ResBlocks with standard single-branch 2D convolutions. | 17.37M | **4,109,728** |
+| **S6** | **No 2D-CNN Frontend:** S1 without any 2D-CNN module | `loss: aam_softmax`<br>`mlfc: true`<br>`mlasp_context: true`<br>`frontend: none` | Acoustic features feed directly into TDNN-LSTM. MLFC pools over $X_i = [X_l; X_t]$. | 6.34M | **2,195,584** |
 
-### 4.1 Note on Paper Parameter Jumps
+### 4.1 Note on Paper Parameter Jumps and Discrepancies
 > [!NOTE]
-> Table II gives S1 = 30.91M and S5 = 17.37M, a 13.54M difference `[Derived]`. PRD_review argues that replacing SKA with vanilla convs in the paper's ResBlocks cannot explain a delta that large `[External-UNVERIFIED: reviewer estimate]`. Either the paper's front-end differs from this reconstruction or S5 changes widths. This is tracked as OPEN_QUESTIONS Q2, and all parameter numbers will be measured with `torchinfo` and logged. The paper itself remarks that reduced complexity lowers parameters but degrades performance `[Paper, Sec. IV-B]`; the ablations vary parameters and structure together.
+> 1. **Paper Parameter Jumps:** Table II gives S1 = 30.91M and S5 = 17.37M, a 13.54M difference `[Derived]`. In our measured implementation, replacing fwSKA + cwSKA with vanilla Conv2d changes params from 4,167,700 to 4,109,728 (a delta of 57,972). This confirms the observation in `PRD_review.md` that replacing SKA branches alone without altering channel widths cannot account for a 13.54M parameter drop. Either the original authors changed channel counts in S5 or had significantly different block dimensions (tracked in `OPEN_QUESTIONS.md` Q2).
+> 2. **PRD Discrepancy:** The PRD originally estimated 2.65M parameters for the scaled model by hand calculation assuming a reverse-engineered $d_{attn}=614$ and different flattening. Measured via `torchinfo.summary()` at $C=32, C_1=256, d_{attn}=128$, the actual parameter count is 4,167,700 (~4.17M), matching `PRD_review.md`'s analytical range of 4.1–4.2M. The code strictly preserves the paper's tensor contracts rather than reverse-engineering dimensions to match the PRD's 2.65M estimate.
+
+---
+
+## 5. Baseline Architecture: ECAPA-TDNN
+
+To evaluate architectural inductive bias without capacity confounding (ADR-002), we implement the canonical ECAPA-TDNN architecture (Desplanques et al., Interspeech 2020) with Res2Net temporal blocks, channel-wise Squeeze-and-Excitation, multi-layer aggregation, and attentive statistics pooling with global context.
+
+### 5.1 Baseline Variants & Measured Parameter Counts
+
+| Model Architecture | Channel Configuration | Res2Net Scale | SE Channels | Attn Channels | Measured Total Params `[torchinfo]` | Measured Trainable `[torchinfo]` | Delta vs SKA-HNN (4,167,700) |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Parameter-Matched ECAPA-TDNN** | `[400, 400, 400, 400, 1200]` | 8 | 128 | 128 | **4,123,210** | **4,123,210** | **-44,490 (-1.07%)** |
+| **Standard ECAPA-TDNN** | `[1024, 1024, 1024, 1024, 3072]` | 8 | 128 | 128 | **20,767,552** | **20,767,552** | +16,599,852 (+398.3%) |
+
+### 5.2 Tensor Contract & Feature Parity
+- **Input:** Accepts acoustic log-Mel filterbank spectrograms of shape `(B, 80, T)` or `(B, 1, 80, T)` matching SKA-HNN front-end contracts.
+- **Output:** 192-dimensional speaker embedding `(B, 192)` normalized to unit L2 norm during evaluation.
+- **Pooling:** Attentive Statistics Pooling (ASP) computing weighted mean and standard deviation over temporal frames with fp32 variance clamping (`eps=1e-5`) per Rule 5.1.
