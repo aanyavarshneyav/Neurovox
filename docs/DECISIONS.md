@@ -176,3 +176,27 @@ This document records the architectural, methodological, and experimental design
   3. Every trial generation run writes a comprehensive audit report (`trials_report.json`) documenting excluded speakers, fractions, per-speaker target/impostor counts, reuse histograms, and SHA-256 checksums `[Engineering Choice]`.
 - **Consequences:** Eliminates room-tone acoustic cheating, avoids artificial sample duplication, and provides complete cryptographic transparency and reproducibility for verification evaluation.
 
+---
+
+## ADR-017: Verification Trial Protocol v2 — Gender Matching, Cross-Chapter Utterance-Weighted Impostors, Exclusion Symmetry, and Cryptographic Supersession
+- **Date:** 2026-11-03
+- **Status:** Accepted (supersedes v1 trial lists and ADR-016 single-chapter impostor retention)
+- **Context:**
+  1. An independent methodological review (`docs/reviews/1B_review.md`) identified that ADR-016 had retained single-chapter speakers in the impostor pool while excluding them from targets. Because single-chapter speakers in LibriSpeech exhibit significantly longer mean utterance durations (e.g., 9.19 s in `test-clean` vs 7.01 s for multi-chapter speakers), this created an acoustic duration shortcut (11.54% target-impostor duration difference).
+  2. Impostor gender counts were not matched to target gender counts (H4), resulting in gender distribution skew.
+  3. Chapter-uniform impostor sampling distorted the utterance marginal distribution relative to cross-chapter target sampling (H5).
+  4. ADR-016 claimed utterance reuse was capped at 4–5x, but that held only for the *mean*; due to asymmetric chapter sizes within multi-chapter speakers (e.g., 2 utterances in chapter A vs 35 in chapter B), capping maximum per-utterance reuse at $\le 10$ while enforcing 100 cross-chapter targets per speaker is mathematically impossible on LibriSpeech.
+- **Decision:**
+  1. **Exclusion Symmetry:** Single-chapter speakers are strictly excluded from BOTH target trials and impostor trials. This restores symmetric speaker representation and eliminates the single-chapter duration shortcut `[Engineering Choice]`.
+  2. **Exact Gender Matching (H4):** Impostor gender counts ($N_{\text{imp}, M}, N_{\text{imp}, F}$) are matched exactly to target gender counts ($N_{\text{tgt}, M}, N_{\text{tgt}, F}$) per partition `[Engineering Choice]`.
+  3. **Utterance-Weighted Impostor Sampling (H5):** Impostor utterances are sampled with cross-chapter pair weights identical to target marginals, guaranteeing that target-vs-impostor mean duration differs by $< 3\%$ (measured: $0.33\%$ on `test-clean`, $2.48\%$ on `test-other`, $1.93\%$ on `dev-clean`) `[Engineering Choice]`.
+  4. **Deterministic Sorting & Local RNG:** Manifest rows are sorted by `utt_id` prior to processing, and per-call local RNG instances are used so output is bitwise deterministic regardless of execution environment `[Engineering Choice]`.
+  5. **Companion Metadata CSV:** Every trial list is accompanied by a `_meta.csv` file recording `spk_a`, `spk_b`, `gender`, `dur_a`, `dur_b`, and utterance IDs for speaker bootstrap evaluation `[Engineering Choice]`.
+  6. **Utterance Reuse Transparency:** While mean (4.5x–5.9x) and median (4.0x–5.0x) reuse remain modest, the full empirical distribution and percentiles are logged in `trials_report_*.json`, superseding the informal ADR-016 claim `[Engineering Choice]`.
+  7. **Cryptographic Supersession:** The v1 trial lists are marked SUPERSEDED:
+     - `trials_test-clean.txt`: v1 (`371a42e7dee37d6cfa5a61b7b264e3cb53c68680c5499c038627e2eede15f228`) $\to$ superseded by v2 (`5b47db5e847990a75b35edfc5d906944dd069a59144df7c6b5f5126388ee6aa1`).
+     - `trials_test-other.txt`: v1 (`fa3b756a9c3b9b567126e37abd12021192922ece779385663d450543262517a6`) $\to$ superseded by v2 (`92e651bccc3af6253b6c97437d3197812cf384490cbe16cd812253779651a9a6`).
+     - `trials_dev-clean.txt`: v1 (`e155f12922d345f6d730cfcbd32d3082da55b4e26e105e062771ea814532002c`) $\to$ superseded by v2 (`2025424ac8116efa2ab5a008cb112d4598a7c2e8b28f30abb6be81680312d32d`).
+- **Consequences:** Restores complete duration and gender symmetry, eliminates acoustic duration shortcuts, enables speaker-level bootstrap CIs via exported metadata, and documents the true empirical utterance reuse distribution.
+
+

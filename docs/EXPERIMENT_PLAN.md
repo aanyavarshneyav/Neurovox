@@ -198,7 +198,18 @@ Every run must correspond to a distinct YAML configuration file in `configs/` an
 ## 5. Statistical Rigor Protocol
 
 1. **Seeds:** Random seeds `42`, `43`, and `44` for headline runs; all data shuffling, weight initialization, and augmentation generators seeded.
-2. **Confidence Intervals:** 95% confidence intervals generated via 1,000 paired bootstrap iterations over speakers/utterances. Competing models are evaluated against identical resample masks.
-3. **Dual minDCF Reporting:** Every evaluation script must calculate and output minDCF at both:
-   - $P_{\text{target}} = 0.01$ ($C_{\text{miss}} = 1.0, C_{\text{fa}} = 1.0$)
-   - $P_{\text{target}} = 0.05$ ($C_{\text{miss}} = 1.0, C_{\text{fa}} = 1.0$)
+2. **Speaker-Level Clustered Bootstrap (H3):**
+   - **Sampling Procedure:** Resample unique evaluation speakers with replacement over $B=1,000$ iterations.
+   - **Weight Formulation:** In each bootstrap iteration, trials receive cluster weights based on speaker appearance counts:
+     - Target trials ($s_a = s_b$): weight $w_i = \text{count}(s_a)$.
+     - Impostor trials ($s_a \ne s_b$): weight $w_i = \text{count}(s_a) \times \text{count}(s_b)$.
+   - **Paired Comparisons:** Competing models evaluated on the same trial set receive identical speaker resample weights per iteration, yielding paired difference distributions ($\Delta = M_A - M_B$) and 95% percentile confidence intervals. Independent evaluation partitions (e.g. `test-other` vs `test-clean`) use two-sample independent speaker bootstrap resampling.
+   - **Scope & Limitations [Documented per H3]:**
+     - *What it captures:* Speaker sampling variance — the uncertainty arising from evaluating on a finite cohort of ~29 qualifying speakers drawn from the broader speaker population.
+     - *What it does NOT capture:*
+       - **Training-seed variance:** Stochasticity in weight initialization, batch order, and optimization trajectories. This is captured separately by running $\ge 3$ random seeds ($42, 43, 44$) and reporting mean $\pm$ standard deviation across models.
+       - **Utterance-reuse correlation:** Within-speaker correlation induced by reusing individual utterances across multiple trial pairings due to LibriSpeech's asymmetric chapter sizes.
+3. **Dual minDCF Reporting & Normalization (H2):** Every evaluation script must calculate and output minDCF at both:
+   - Primary prior: $P_{\text{target}} = 0.05$ ($C_{\text{miss}} = 1.0, C_{\text{fa}} = 1.0$), normalized by default by dividing by $C_{\text{default}} = \min(C_{\text{miss}} P, C_{\text{fa}} (1-P)) = 0.05$.
+   - Indicative prior: $P_{\text{target}} = 0.01$ ($C_{\text{miss}} = 1.0, C_{\text{fa}} = 1.0$), normalized by default by dividing by $C_{\text{default}} = 0.01$.
+   - Both normalized (`min_dcf`) and raw unnormalized (`min_dcf_raw`) metrics are logged.

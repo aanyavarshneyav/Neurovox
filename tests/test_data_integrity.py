@@ -194,6 +194,7 @@ def test_synthetic_data_pipeline_end_to_end(tmp_path):
         "201 | M | dev-clean       | 10.0 | Charlie\n"
         "202 | M | dev-clean       | 10.0 | Dave\n"
         "203 | F | dev-clean       | 10.0 | Eve\n"
+        "205 | F | dev-clean       | 10.0 | Fiona\n"
         "204 | F | dev-clean       | 10.0 | SingleChapterGirl\n"
     )
 
@@ -220,6 +221,9 @@ def test_synthetic_data_pipeline_end_to_end(tmp_path):
     # 203 (F): 2 chapters
     make_flac(mock_raw / "dev-clean" / "203" / "2005" / "203-2005-0001.flac")
     make_flac(mock_raw / "dev-clean" / "203" / "2006" / "203-2006-0001.flac")
+    # 205 (F): 2 chapters
+    make_flac(mock_raw / "dev-clean" / "205" / "2008" / "205-2008-0001.flac")
+    make_flac(mock_raw / "dev-clean" / "205" / "2009" / "205-2009-0001.flac")
     # 204 (F): single chapter ONLY
     make_flac(mock_raw / "dev-clean" / "204" / "2007" / "204-2007-0001.flac")
     make_flac(mock_raw / "dev-clean" / "204" / "2007" / "204-2007-0002.flac")
@@ -227,7 +231,7 @@ def test_synthetic_data_pipeline_end_to_end(tmp_path):
     mock_manifests = tmp_path / "manifests"
     counts = prepare_librispeech(mock_raw, mock_manifests, splits=["train-clean-100", "dev-clean"])
     assert counts["train-clean-100"] == 2
-    assert counts["dev-clean"] == 8
+    assert counts["dev-clean"] == 10
 
     # Verify train_spk2label.json
     spk2label_file = mock_manifests / "train_spk2label.json"
@@ -245,7 +249,7 @@ def test_synthetic_data_pipeline_end_to_end(tmp_path):
 
     trials, report = gen.generate_trials(targets_per_speaker=1)
     assert report["num_excluded_single_chapter_speakers"] == 1
-    assert report["target_trials_count"] == 3  # 201, 202, 203 each give 1 target
+    assert report["target_trials_count"] == 4  # 201, 202, 203, 205 each give 1 target
 
     # Assert 100% cross chapter on generated targets
     for label, p1, p2 in trials:
