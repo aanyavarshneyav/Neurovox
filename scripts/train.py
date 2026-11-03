@@ -30,7 +30,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from src.data.dataset import LibriSpeechDataset
 from src.data.sampler import SpeakerBalancedBatchSampler
 from src.losses.aam_softmax import AAMSoftmax
-from src.models.small_tdnn_se import small_tdnn_se
+from src.models import build_ska_hnn_from_config, small_tdnn_se
 from src.training.trainer import Trainer, find_latest_checkpoint
 from src.utils.paths import get_ckpt_root, get_data_root, get_results_root, resolve_path
 
@@ -251,11 +251,17 @@ def main() -> int:
         pin_memory=bool(cfg.hardware.get("pin_memory", False)),
     )
 
-    # Model: small_tdnn_se
-    in_features = int(cfg.audio.get("n_mels", 80))
-    channels = int(cfg.model.get("channels", 128))
+    # Model instantiation keyed on cfg.model.name
+    model_name = cfg.model.get("name", "small_tdnn_se")
     emb_dim = int(cfg.model.get("emb_dim", 192))
-    model = small_tdnn_se(in_features=in_features, channels=channels, emb_dim=emb_dim).to(device)
+    if model_name == "small_tdnn_se":
+        in_features = int(cfg.audio.get("n_mels", 80))
+        channels = int(cfg.model.get("channels", 128))
+        model = small_tdnn_se(in_features=in_features, channels=channels, emb_dim=emb_dim).to(device)
+    elif model_name == "ska_hnn":
+        model = build_ska_hnn_from_config(cfg).to(device)
+    else:
+        raise ValueError(f"Unknown model architecture: '{model_name}'")
 
     # Loss: AAMSoftmax
     scale = float(cfg.loss.get("scale", 30.0))

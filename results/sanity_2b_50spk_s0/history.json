@@ -1,0 +1,36 @@
+[
+  {
+    "epoch": 1,
+    "sampler_epoch": 1,
+    "first_batch_index_hash": "e68e1899926439b3",
+    "unique_utts_this_epoch": 3616,
+    "cum_unique_utts": 3616,
+    "train_loss": 8.244,
+    "train_loss_unrounded": 8.244035699394312,
+    "train_acc": 31.85,
+    "train_sec": 51.7,
+    "lr": 0.001,
+    "grad_norm": 43.5025,
+    "eval_sec": 40.3,
+    "dev_eer_pct": 29.84,
+    "dev_mindcf_05": 0.8994,
+    "train_probe_eer_pct": null
+  },
+  {
+    "epoch": 2,
+    "sampler_epoch": 2,
+    "first_batch_index_hash": "01d2ade5b02ef97d",
+    "unique_utts_this_epoch": 3592,
+    "cum_unique_utts": 4893,
+    "train_loss": 3.6219,
+    "train_loss_unrounded": 3.621879663360253,
+    "train_acc": 76.88,
+    "train_sec": 49.61,
+    "lr": 1e-07,
+    "grad_norm": 20.2863,
+    "eval_sec": 41.72,
+    "dev_eer_pct": 20.81,
+    "dev_mindcf_05": 0.8219,
+    "train_probe_eer_pct": null
+  }
+]
