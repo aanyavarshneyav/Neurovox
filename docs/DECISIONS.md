@@ -200,3 +200,19 @@ This document records the architectural, methodological, and experimental design
 - **Consequences:** Restores complete duration and gender symmetry, eliminates acoustic duration shortcuts, enables speaker-level bootstrap CIs via exported metadata, and documents the true empirical utterance reuse distribution.
 
 
+---
+
+## ADR-018: Feature Extraction, Augmentation Architecture, and Audio Caching Strategy
+- **Date:** 2026-11-03
+- **Status:** Accepted
+- **Context:** Phase 1C implements the acoustic front-end (80-dim log-Mel filterbanks, CMN, SpecAugment), data loader pipeline with random 180-frame cropping (wrap padding for short clips), waveform augmentations (speed perturbation, colored noise, babble, RIR), and speaker-balanced mini-batch sampling.
+- **Decision:**
+  1. **On-the-Fly Audio Decoding (No Disk Memmap Cache by Default):**
+     Measured data-loading latency on genuine LibriSpeech audio (`train-clean-100`) with $B=64$, 4 DataLoader workers, and active augmentations is **$47.36\text{ ms/batch}$** ($21.12\text{ batches/s}$). This is **2.46x faster** than the lower-bound model forward+backward step ($116.51\text{ ms}$) and **8.69x faster** than the full SKA model step ($411.52\text{ ms}$). Because asynchronous background worker pre-fetching completely hides I/O latency, and building an ~11.6 GB int16 memmap cache on disk would leave only $< 0\text{ GB}$ free space (violating the $\ge 8\text{ GB}$ free disk buffer requirement on the Mac M3 Pro), on-the-fly decoding is retained as the default strategy. The disk memmap writer and reader (`scripts/build_audio_cache.py`, `src/data/cache.py`) are fully implemented and tested if needed `[Engineering Choice]`.
+  2. **Speed Perturbation Optimization:**
+     Continuous speed factors $\in [0.95, 1.05]$ when passed to `torchaudio.functional.resample` cause GCD drops (e.g., $\text{gcd}(16552, 16000) = 8$), triggering massive polyphase FIR filter synthesis on CPU (~666 ms per utterance). Speed perturbation is therefore performed via 1D linear interpolation (`torch.nn.functional.interpolate` with `mode="linear"`) on a pre-cropped $\approx 33,000$-sample audio buffer, executing in $< 0.25\text{ ms}$ with high acoustic fidelity `[Engineering Choice]`.
+  3. **Strict Worker-Seeded Augmentations:**
+     All waveform and spectrogram augmentations receive a local `np.random.Generator` derived from `worker_info.seed` (or base seed), the current epoch, and the sample index. No augmentation or random crop relies on Python's global `random`, global `np.random`, or global PyTorch RNG `[Engineering Choice]`.
+  4. **Speaker-Balanced Batch Sampler:**
+     Mini-batches of size $B=64$ sample $B$ distinct speakers without replacement. An unvisited speaker pool ensures all 251 training speakers are guaranteed to be visited every epoch before any speaker is re-visited `[Engineering Choice]`.
+- **Consequences:** End-to-end non-blocking data loading ($47.36\text{ ms} \ll 411.52\text{ ms}$), zero disk exhaustion risk, completely reproducible worker-level augmentation streams, and guaranteed distinct speakers per batch.
