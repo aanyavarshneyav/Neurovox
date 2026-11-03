@@ -42,12 +42,15 @@ def load_trials(trials_file: Path) -> list[tuple[int, Path, Path]]:
 
 
 def extract_embedding(model, audio_path: Path, device: torch.device) -> torch.Tensor:
-    """Load audio and extract l2-normalized embedding vector."""
-    wav, sr = torchaudio.load(str(audio_path))
+    """Load audio using soundfile and extract l2-normalized embedding vector."""
+    audio, sr = sf.read(str(audio_path), dtype="float32")
+    wav = torch.from_numpy(audio).float()
+    if wav.ndim > 1:
+        wav = wav.mean(dim=-1)
+    if wav.ndim == 1:
+        wav = wav.unsqueeze(0)  # Shape (1, time)
     if sr != 16000:
         wav = torchaudio.functional.resample(wav, sr, 16000)
-    if wav.shape[0] > 1:
-        wav = wav.mean(dim=0, keepdim=True)
     wav = wav.to(device)
     with torch.no_grad():
         emb = model.encode_batch(wav)

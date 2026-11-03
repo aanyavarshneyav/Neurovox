@@ -6,10 +6,11 @@ Downloads:
 - dev-clean.tar.gz (~338 MB)
 - test-clean.tar.gz (~347 MB)
 - test-other.tar.gz (~329 MB)
-From OpenSLR (mirror: https://openslr.trmal.net/resources/12/ or https://www.openslr.org/resources/12/).
+From OpenSLR mirrors.
 
 Features:
-- Resume support (HTTP Range headers)
+- Robust HTTP Range resume support across mirrors
+- Automatic reconnection on socket timeouts / IncompleteRead
 - MD5 checksum verification against official OpenSLR md5sum.txt
 - Sequential download -> verify -> extract -> delete tarball to maintain >= 8 GB free disk buffer
 - Extraction target: data/raw/
@@ -33,8 +34,9 @@ sys.path.insert(0, str(REPO_ROOT))
 from src.utils.paths import get_data_root, resolve_path
 
 OPENSLR_BASE_URLS = [
-    "https://openslr.trmal.net/resources/12/",
+    "https://openslr.magicdatatech.com/resources/12/",
     "https://openslr.elda.org/resources/12/",
+    "https://openslr.trmal.net/resources/12/",
     "https://www.openslr.org/resources/12/",
 ]
 
@@ -92,33 +94,40 @@ def download_file_with_resume(
     expected_size: int,
     base_urls: list[str] = OPENSLR_BASE_URLS,
     chunk_size: int = 1024 * 1024,
+    max_retries: int = 100,
 ) -> None:
-    """Download a file with HTTP Range resume support across mirrors."""
+    """Download a file with HTTP Range resume support across mirrors with auto-reconnection."""
     dest_path.parent.mkdir(parents=True, exist_ok=True)
-    existing_bytes = dest_path.stat().st_size if dest_path.exists() else 0
 
-    if existing_bytes == expected_size:
-        print(f"  [Resume] {filename} already fully downloaded ({existing_bytes:,} bytes).")
-        return
-    elif existing_bytes > expected_size:
-        print(f"  [Warning] Existing file larger than expected. Truncating {filename}.")
-        dest_path.unlink()
-        existing_bytes = 0
+    mirror_idx = 0
+    retries = 0
 
-    headers = {"User-Agent": "Neurovox-Downloader/1.0"}
-    if existing_bytes > 0:
-        headers["Range"] = f"bytes={existing_bytes}-"
-        print(f"  [Resume] Resuming {filename} from {existing_bytes:,} bytes...")
+    while True:
+        existing_bytes = dest_path.stat().st_size if dest_path.exists() else 0
+        if existing_bytes == expected_size:
+            print(f"  [Complete] {filename} is fully downloaded ({existing_bytes:,} bytes).")
+            return
+        elif existing_bytes > expected_size:
+            print(f"  [Warning] Existing file larger than expected. Truncating {filename}.")
+            dest_path.unlink()
+            existing_bytes = 0
 
-    last_error: Exception | None = None
-    for base_url in base_urls:
+        base_url = base_urls[mirror_idx % len(base_urls)]
         url = base_url + filename
+        headers = {"User-Agent": "Neurovox-Downloader/1.0"}
+        if existing_bytes > 0:
+            headers["Range"] = f"bytes={existing_bytes}-"
+            print(f"  [Resume] Resuming {filename} from {existing_bytes:,} / {expected_size:,} bytes via {base_url}...")
+        else:
+            print(f"  [Download] Starting {filename} ({expected_size:,} bytes) via {base_url}...")
+
         req = urllib.request.Request(url, headers=headers)
         try:
-            print(f"  Connecting to {url} ...")
             with urllib.request.urlopen(req, timeout=30) as resp:
-                mode = "ab" if existing_bytes > 0 else "wb"
-                downloaded = existing_bytes
+                is_partial = resp.status == 206
+                mode = "ab" if (existing_bytes > 0 and is_partial) else "wb"
+                downloaded = existing_bytes if (existing_bytes > 0 and is_partial) else 0
+
                 start_time = time.time()
                 last_log = start_time
 
@@ -141,13 +150,26 @@ def download_file_with_resume(
                             )
                             last_log = now
 
-            # If completed successfully, break mirror loop
-            return
-        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError) as e:
-            print(f"  [Mirror failed] {url}: {e}. Trying next mirror...")
-            last_error = e
+            if dest_path.exists() and dest_path.stat().st_size == expected_size:
+                print(f"  [Success] Downloaded {filename} ({expected_size:,} bytes).")
+                return
+            else:
+                curr_size = dest_path.stat().st_size if dest_path.exists() else 0
+                print(f"  [Incomplete] Connection closed at {curr_size:,} / {expected_size:,} bytes. Resuming...")
+                mirror_idx += 1
+                retries += 1
+                if retries > max_retries:
+                    raise RuntimeError(f"Exceeded max retries for {filename}.")
+                time.sleep(2.0)
 
-    raise RuntimeError(f"Failed to download {filename} from all mirrors. Last error: {last_error}")
+        except Exception as e:
+            curr_size = dest_path.stat().st_size if dest_path.exists() else 0
+            print(f"  [Connection drop] {url}: {e} (saved {curr_size:,} bytes). Retrying in 2s with next mirror...")
+            mirror_idx += 1
+            retries += 1
+            if retries > max_retries:
+                raise RuntimeError(f"Exceeded maximum retries ({max_retries}) for {filename}. Last error: {e}")
+            time.sleep(2.0)
 
 
 def extract_tarball(archive_path: Path, extract_dir: Path) -> None:
@@ -164,20 +186,17 @@ def copy_or_download_metadata(extract_dir: Path, base_urls: list[str] = OPENSLR_
     libri_dir = extract_dir / "LibriSpeech"
     libri_dir.mkdir(parents=True, exist_ok=True)
 
-    # Check if they already exist in data/LibriSpeech
     alt_dir = get_data_root() / "LibriSpeech"
 
     for meta in METADATA_FILES:
         target = libri_dir / meta
         if target.exists():
             continue
-        # Check fallback in alt_dir
         if (alt_dir / meta).exists():
             print(f"  Copying {meta} from {alt_dir}...")
             shutil.copy2(alt_dir / meta, target)
             continue
 
-        # Download from OpenSLR
         for base_url in base_urls:
             url = base_url + meta
             try:
@@ -219,7 +238,6 @@ def main() -> None:
     dest_dir = Path(args.dest_dir).resolve()
     temp_download_dir = dest_dir / ".download_tmp"
 
-    # Filter requested archives
     requested_archives = {
         name: meta
         for name, meta in LIBRISPEECH_ARCHIVES.items()
@@ -228,10 +246,7 @@ def main() -> None:
 
     total_download_bytes = sum(int(m["size_bytes"]) for m in requested_archives.values())
     total_download_gb = total_download_bytes / (1024**3)
-
-    # Estimate extracted size (~1.3x compressed size)
     estimated_extracted_gb = total_download_gb * 1.3
-
     current_free_gb = get_available_disk_gb(dest_dir.parent if dest_dir.exists() else dest_dir.parent.parent)
 
     print("==================================================================")
@@ -263,13 +278,6 @@ def main() -> None:
             print("Download cancelled by user.")
             sys.exit(0)
 
-    # Check disk buffer
-    # Since we extract and delete sequentially, the peak extra space needed during a single
-    # archive step is: (largest archive size) + (largest archive extracted size)
-    # Largest archive is train-clean-100: ~6.0 GiB archive + ~8.3 GiB extracted = ~14.3 GiB.
-    # After tarball deletion, net disk used is ~8.3 GiB.
-    # Current free disk: ~27.5 GiB.
-    # 27.5 - 14.3 = 13.2 GiB free during peak, leaving > 8 GB buffer.
     largest_archive_bytes = max(int(m["size_bytes"]) for m in requested_archives.values())
     peak_needed_gb = (largest_archive_bytes / (1024**3)) * 2.3
     if current_free_gb - peak_needed_gb < 8.0:
@@ -281,10 +289,8 @@ def main() -> None:
     temp_download_dir.mkdir(parents=True, exist_ok=True)
     dest_dir.mkdir(parents=True, exist_ok=True)
 
-    # Download root metadata first
     copy_or_download_metadata(dest_dir)
 
-    # Process each archive sequentially: download -> verify -> extract -> delete
     for name, meta in requested_archives.items():
         split = str(meta["split"])
         libri_split_dir = dest_dir / "LibriSpeech" / split
@@ -297,7 +303,7 @@ def main() -> None:
         expected_md5 = str(meta["md5"])
 
         print(f"\n---> Processing {split} ({name})")
-        # 1. Download with resume
+        # 1. Download with resume & auto-reconnect
         download_file_with_resume(name, archive_tmp_path, expected_size)
 
         # 2. Checksum verification
@@ -321,7 +327,6 @@ def main() -> None:
         free_now = get_available_disk_gb(dest_dir)
         print(f"  [Disk Status] Free disk space: {free_now:.2f} GiB")
 
-    # Clean up temp directory
     shutil.rmtree(temp_download_dir, ignore_errors=True)
     print("\n==================================================================")
     print("LibriSpeech download and extraction successfully completed.")
@@ -332,4 +337,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
