@@ -201,6 +201,8 @@ class Trainer:
         """Execute one complete training epoch over train_loader."""
         self.model.train()
         self.loss_fn.train()
+        if hasattr(self.loss_fn, "set_epoch"):
+            self.loss_fn.set_epoch(epoch)
 
         # Update batch_sampler epoch
         batch_sampler = getattr(self.train_loader, "batch_sampler", None)
@@ -322,7 +324,7 @@ class Trainer:
             unique_utts_this_epoch = 0
             cum_unique_utts = len(self.seen_utterances)
 
-        return {
+        epoch_metrics = {
             "train_loss": avg_loss,
             "train_acc": round(train_acc, 2),
             "train_sec": round(train_sec, 2),
@@ -333,6 +335,11 @@ class Trainer:
             "unique_utts_this_epoch": unique_utts_this_epoch,
             "cum_unique_utts": cum_unique_utts,
         }
+
+        if hasattr(self.loss_fn, "get_epoch_diagnostics"):
+            epoch_metrics.update(self.loss_fn.get_epoch_diagnostics())
+
+        return epoch_metrics
 
     def evaluate_trials(self, trial_file: Path) -> Tuple[float, float, float]:
         """Extract full-utterance embeddings and compute EER and minDCF (0.05)."""
@@ -475,6 +482,8 @@ class Trainer:
         self.epoch_0_train_probe_eer = payload.get("epoch_0_train_probe_eer", None)
 
         start_epoch = payload.get("epoch", 0) + 1
+        if hasattr(self.loss_fn, "set_epoch"):
+            self.loss_fn.set_epoch(start_epoch)
         return start_epoch
 
     def save_history_artifacts(self) -> None:
@@ -696,6 +705,10 @@ class Trainer:
                 "acc_pct": round(acc, 2),
                 "grad_norm": round(float(norm.item() if isinstance(norm, torch.Tensor) else norm), 4),
             }
+            if hasattr(self.loss_fn, "get_last_diagnostics"):
+                diag = self.loss_fn.get_last_diagnostics()
+                if diag:
+                    record["loss_diagnostics"] = diag
             history.append(record)
 
             if step == 1 or step % 25 == 0 or step == num_steps:

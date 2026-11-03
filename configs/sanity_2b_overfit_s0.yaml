@@ -40,10 +40,15 @@ model:
   ls_window: 21
 
 loss:
-  name: "aam_softmax"
+  name: "iaam_softmax"
   num_classes: 251
   scale: 30.0
   margin: 0.2
+  tau: 0.423
+  tau_corr: 0.5
+  esd: 5
+  esc: 5
+  min_keep_ratio: 0.5
 
 training:
   batch_size: 64

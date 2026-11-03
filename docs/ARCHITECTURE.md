@@ -116,3 +116,21 @@ Definitions S0–S6 and the parameter column are taken from Table II and the Sec
 > [!NOTE]
 > 1. **Paper Parameter Jumps:** Table II gives S1 = 30.91M and S5 = 17.37M, a 13.54M difference `[Derived]`. In our measured implementation, replacing fwSKA + cwSKA with vanilla Conv2d changes params from 4,167,700 to 4,109,728 (a delta of 57,972). This confirms the observation in `PRD_review.md` that replacing SKA branches alone without altering channel widths cannot account for a 13.54M parameter drop. Either the original authors changed channel counts in S5 or had significantly different block dimensions (tracked in `OPEN_QUESTIONS.md` Q2).
 > 2. **PRD Discrepancy:** The PRD originally estimated 2.65M parameters for the scaled model by hand calculation assuming a reverse-engineered $d_{attn}=614$ and different flattening. Measured via `torchinfo.summary()` at $C=32, C_1=256, d_{attn}=128$, the actual parameter count is 4,167,700 (~4.17M), matching `PRD_review.md`'s analytical range of 4.1–4.2M. The code strictly preserves the paper's tensor contracts rather than reverse-engineering dimensions to match the PRD's 2.65M estimate.
+
+---
+
+## 5. Baseline Architecture: ECAPA-TDNN
+
+To evaluate architectural inductive bias without capacity confounding (ADR-002), we implement the canonical ECAPA-TDNN architecture (Desplanques et al., Interspeech 2020) with Res2Net temporal blocks, channel-wise Squeeze-and-Excitation, multi-layer aggregation, and attentive statistics pooling with global context.
+
+### 5.1 Baseline Variants & Measured Parameter Counts
+
+| Model Architecture | Channel Configuration | Res2Net Scale | SE Channels | Attn Channels | Measured Total Params `[torchinfo]` | Measured Trainable `[torchinfo]` | Delta vs SKA-HNN (4,167,700) |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Parameter-Matched ECAPA-TDNN** | `[400, 400, 400, 400, 1200]` | 8 | 128 | 128 | **4,123,210** | **4,123,210** | **-44,490 (-1.07%)** |
+| **Standard ECAPA-TDNN** | `[1024, 1024, 1024, 1024, 3072]` | 8 | 128 | 128 | **20,767,552** | **20,767,552** | +16,599,852 (+398.3%) |
+
+### 5.2 Tensor Contract & Feature Parity
+- **Input:** Accepts acoustic log-Mel filterbank spectrograms of shape `(B, 80, T)` or `(B, 1, 80, T)` matching SKA-HNN front-end contracts.
+- **Output:** 192-dimensional speaker embedding `(B, 192)` normalized to unit L2 norm during evaluation.
+- **Pooling:** Attentive Statistics Pooling (ASP) computing weighted mean and standard deviation over temporal frames with fp32 variance clamping (`eps=1e-5`) per Rule 5.1.

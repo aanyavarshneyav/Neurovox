@@ -117,6 +117,10 @@ class AAMSoftmax(nn.Module):
         w_norm = F.normalize(self.weight.float(), p=2, dim=1)
         return F.linear(x_norm, w_norm)
 
+    def set_epoch(self, epoch: int) -> None:
+        """No-op epoch update for standard AAMSoftmax compatibility."""
+        pass
+
 
 __all__ = ["AAMSoftmax"]
 
