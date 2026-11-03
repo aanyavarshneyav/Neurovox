@@ -261,14 +261,16 @@ def test_synthetic_data_pipeline_end_to_end(tmp_path):
 
 def test_cross_machine_trial_checksum_verification(tmp_path):
     """Verify that verify_trials correctly validates committed v2 trials and detects corruption."""
-    from scripts.verify_trials import verify_trials, COMMITTED_V2_CHECKSUMS
+    from scripts.verify_trials import verify_trials, COMMITTED_V2_CHECKSUMS, COMMITTED_MANIFEST_CHECKSUMS
 
     trials_dir = get_data_root() / "trials"
     if trials_dir.exists() and (trials_dir / "trials_test-clean.txt").exists():
         results = verify_trials(trials_dir, strict=True)
-        assert len(results) == len(COMMITTED_V2_CHECKSUMS)
+        manifest_dir = get_data_root() / "manifests"
+        expected_count = len(COMMITTED_V2_CHECKSUMS) + (len(COMMITTED_MANIFEST_CHECKSUMS) if (manifest_dir / "train-50spk.csv").exists() else 0)
+        assert len(results) == expected_count
         for fname, r in results.items():
-            assert r["status"] is True, f"Committed trial file {fname} failed checksum verification"
+            assert r["status"] is True, f"Committed file {fname} failed checksum verification"
 
     # Test error handling when corrupted
     mock_trials = tmp_path / "mock_trials"

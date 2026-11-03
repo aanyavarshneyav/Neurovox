@@ -1,0 +1,4 @@
+epoch,sampler_epoch,first_batch_index_hash,unique_utts_this_epoch,cum_unique_utts,train_loss,train_acc,train_sec,lr,grad_norm,eval_sec,dev_eer_pct,dev_mindcf_05,train_probe_eer_pct
+1,1,d46f94d9a5f05e49,3609,3609,8.4377,30.3,18.5,0.001,28.1493,11.8,25.45,0.8471,
+2,2,bf25f4b4587de81a,3625,4921,5.2722,64.45,19.69,1e-07,21.2847,11.43,20.39,0.7813,
+3,3,7fafad244dee0d04,3593,5391,4.303,73.61,18.38,0.001,22.4798,9.99,22.74,0.7642,

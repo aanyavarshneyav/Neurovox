@@ -15,7 +15,8 @@ Front-end specifications:
   strictly applied during training only (bypassed in eval mode).
 """
 
-from typing import Optional
+from typing import Optional, Dict, Any
+import numpy as np
 import torch
 import torch.nn as nn
 import torchaudio.transforms as T
@@ -59,11 +60,16 @@ class SpecAugment(nn.Module):
         self.freq_mask = T.FrequencyMasking(freq_mask_param=freq_mask_param, iid_masks=True)
         self.time_mask = T.TimeMasking(time_mask_param=time_mask_param, iid_masks=True)
 
-    def forward(self, spec: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        spec: torch.Tensor,
+        rng: Optional[np.random.Generator] = None,
+    ) -> torch.Tensor:
         """Apply SpecAugment masking to spectrogram tensor.
 
         Args:
             spec: Spectrogram tensor of shape (B, F, T) or (F, T).
+            rng: Optional NumPy random generator for deterministic worker-independent seeding.
 
         Returns:
             Masked spectrogram tensor with identical shape and dtype.
@@ -72,7 +78,31 @@ class SpecAugment(nn.Module):
         if not self.training:
             return spec
 
-        # If probability check is not met, return untouched
+        if rng is not None:
+            if self.p < 1.0 and float(rng.random()) >= self.p:
+                return spec
+
+            out = spec.clone()
+            F_dim = out.size(-2)
+            T_dim = out.size(-1)
+
+            # Apply frequency masking
+            for _ in range(self.num_freq_masks):
+                f_len = int(rng.integers(0, self.freq_mask_param + 1))
+                if f_len > 0 and F_dim > f_len:
+                    f_start = int(rng.integers(0, F_dim - f_len + 1))
+                    out[..., f_start : f_start + f_len, :] = 0.0
+
+            # Apply time masking
+            for _ in range(self.num_time_masks):
+                t_len = int(rng.integers(0, self.time_mask_param + 1))
+                if t_len > 0 and T_dim > t_len:
+                    t_start = int(rng.integers(0, T_dim - t_len + 1))
+                    out[..., :, t_start : t_start + t_len] = 0.0
+
+            return out
+
+        # Fallback to PyTorch transforms when rng is not provided
         if self.p < 1.0 and torch.rand(1, device=spec.device).item() >= self.p:
             return spec
 
@@ -161,12 +191,17 @@ class LogMelSpectrogram(nn.Module):
             p=specaug_p,
         )
 
-    def forward(self, waveform: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        waveform: torch.Tensor,
+        rng: Optional[np.random.Generator] = None,
+    ) -> torch.Tensor:
         """Compute 80-dim log-Mel filterbank spectrogram.
 
         Args:
             waveform: Raw audio tensor of shape (B, T_audio), (B, 1, T_audio),
                 or 1D shape (T_audio,). Expected sampling rate is 16 kHz.
+            rng: Optional NumPy random generator for deterministic SpecAugment.
 
         Returns:
             Normalized log-Mel filterbank tensor of shape (B, 80, T_frames),
@@ -197,9 +232,40 @@ class LogMelSpectrogram(nn.Module):
 
         # Apply SpecAugment in training mode if enabled
         if self.enable_specaug:
-            log_mel = self.specaug(log_mel)
+            log_mel = self.specaug(log_mel, rng=rng)
 
         return log_mel
+
+
+def build_feature_extractor(
+    sample_rate: int = 16000,
+    n_mels: int = 80,
+    win_length_ms: float = 25.0,
+    hop_length_ms: float = 10.0,
+    n_fft: int = 400,
+    apply_cmn: bool = True,
+    enable_specaug: bool = False,
+    freq_mask_param: int = 10,
+    time_mask_param: int = 15,
+    num_freq_masks: int = 2,
+    num_time_masks: int = 2,
+    specaug_p: float = 0.5,
+) -> LogMelSpectrogram:
+    """Unified factory function building LogMelSpectrogram front-end for dataset and extractor."""
+    return LogMelSpectrogram(
+        sample_rate=sample_rate,
+        n_mels=n_mels,
+        win_length_ms=win_length_ms,
+        hop_length_ms=hop_length_ms,
+        n_fft=n_fft,
+        apply_cmn=apply_cmn,
+        enable_specaug=enable_specaug,
+        freq_mask_param=freq_mask_param,
+        time_mask_param=time_mask_param,
+        num_freq_masks=num_freq_masks,
+        num_time_masks=num_time_masks,
+        specaug_p=specaug_p,
+    )
 
 
 def extract_log_mel(
@@ -228,4 +294,7 @@ def extract_log_mel(
     extractor.eval()
     with torch.no_grad():
         return extractor(waveform)
+
+
+__all__ = ["LogMelSpectrogram", "SpecAugment", "extract_log_mel", "build_feature_extractor"]
 
