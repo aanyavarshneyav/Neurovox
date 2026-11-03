@@ -19,9 +19,9 @@
 | `sanity_2a_overfit_v2` | 2026-11-03 | `a7c9b39a` | 42 | `small_tdnn_se` | AAMSoftmax ($s=30, m=0.2$) | 1 fixed batch (64 spk) | 410,928 (0.411M) | N/A (overfit) | N/A | N/A | Mac M3 Pro (`device = mps`, fp32) | PROVISIONAL (superseded by v3) | Train acc: 100.0%, Loss: 13.5060 -> 0.000012 (1,128,742.8x reduction), 0 NaNs. Superseded by sanity_2a_overfit_v3 (ADR-020.2). |
 | `sanity_2a_50spk_v2` | 2026-11-03 | `d3d0115b` | 42 | `small_tdnn_se` | AAMSoftmax (num_classes=50, $s=30, m=0.2$) | 50-speaker subset (5,695 utts) | 410,928 (0.411M) | 20.39% (best dev ep 2) | N/A | 0.7813 (best dev norm ep 2) | Mac M3 Pro (`device = mps`, fp32) | PROVISIONAL (superseded by v3) | 3 epochs, B=32. Step-0 loss: 11.5149. Dev EER: 34.58% (ep 0) -> 20.39% (ep 2). Superseded by sanity_2a_50spk_v3 (ADR-020.2). |
 | `sanity_2a_full_v2` | 2026-11-03 | `70443f48` | 42 | `small_tdnn_se` | AAMSoftmax (num_classes=251, $s=30, m=0.2$) | LibriSpeech train-clean-100 (251 spk, 28,539 utts) | 410,928 (0.411M) | 10.77% (best dev ep 10) | N/A | 0.4548 (best dev norm ep 8) | Mac M3 Pro (`device = mps`, fp32) | PROVISIONAL (superseded by v3) | 10 epochs, B=64, 446 b/ep. Step-0 loss: 13.6501. Dev EER: 34.58% -> 10.77%. Superseded by sanity_2a_full_v3 (ADR-020.2). |
-| `sanity_2a_overfit_v3` | 2026-11-03 | `88b26f9e` | 42 | `small_tdnn_se` | AAMSoftmax ($s=30, m=0.2$) | 1 fixed batch (64 spk) | 410,928 (0.411M) | N/A (overfit) | N/A | N/A | Mac M3 Pro (`device = mps`, fp32) | COMPLETED [GATE PASSED] | Train acc: 100.0%, Loss: 13.4322 -> 0.000012 (1,119,347.3x reduction), 0 NaNs. Constant LR 1e-3, 300 steps. Verified with draw_id 3-tuple contract. |
-| `sanity_2a_50spk_v3` | 2026-11-03 | `d3d0115b` | 42 | `small_tdnn_se` | AAMSoftmax (num_classes=50, $s=30, m=0.2$) | 50-speaker subset (5,695 utts) | 410,928 (0.411M) | 21.42% (best dev ep 2) | N/A | 0.8245 (best dev norm ep 3) | Mac M3 Pro (`device = mps`, fp32) | COMPLETED [GATE PASSED] | 3 epochs, B=32. Step-0 loss: 11.5615. Dev EER: 34.58% (ep 0) -> 24.13% -> 21.42% -> 21.58%. Unique utts: 3616 -> 4893 -> 5390. 0 NaNs. |
-| `sanity_2a_full_v3` | 2026-11-03 | `70443f48` | 42 | `small_tdnn_se` | AAMSoftmax (num_classes=251, $s=30, m=0.2$) | LibriSpeech train-clean-100 (251 spk, 28,539 utts) | 410,928 (0.411M) | 10.26% (best dev ep 10) | N/A | 0.4645 (best dev norm ep 8) | Mac M3 Pro (`device = mps`, fp32) | COMPLETED [GATE PASSED] | 10 epochs, B=64, 446 b/ep. Step-0 loss: 13.7184. Dev EER: 34.58% (ep 0) -> 10.26% (ep 10). Train-probe EER: 25.09% (ep 0) -> 3.55% (ep 10). Cum unique utts: 28,538 (99.996%). |
+| `sanity_2a_overfit_v3` | 2026-11-03 | `88b26f9e` | 42 | `small_tdnn_se` | AAMSoftmax ($s=30, m=0.2$) | 1 fixed batch (64 spk) | 410,928 (0.411M) | N/A (overfit) | N/A | N/A | Mac M3 Pro (`device = mps`, fp32) | COMPLETED [GATE PASSED] | Commit `33499df`. Train acc: 100.0%, Loss: 13.4322 -> 0.000012 (1,119,347.3x reduction), 0 NaNs. Constant LR 1e-3, 300 steps. Verified with draw_id 3-tuple contract. |
+| `sanity_2a_50spk_v3` | 2026-11-03 | `d3d0115b` | 42 | `small_tdnn_se` | AAMSoftmax (num_classes=50, $s=30, m=0.2$) | 50-speaker subset (5,695 utts) | 410,928 (0.411M) | 21.42% (best dev ep 2) | N/A | 0.8245 (best dev norm ep 3) | Mac M3 Pro (`device = mps`, fp32) | COMPLETED [GATE PASSED] | Commit `33499df`. 3 epochs, B=32. Step-0 loss: 11.5615. Dev EER: 34.58% (ep 0) -> 24.13% -> 21.42% -> 21.58%. Unique utts: 3616 -> 4893 -> 5390. 0 NaNs. |
+| `sanity_2a_full_v3` | 2026-11-03 | `70443f48` | 42 | `small_tdnn_se` | AAMSoftmax (num_classes=251, $s=30, m=0.2$) | LibriSpeech train-clean-100 (251 spk, 28,539 utts) | 410,928 (0.411M) | 10.26% (best dev ep 10) | N/A | 0.4645 (best dev norm ep 8) | Mac M3 Pro (`device = mps`, fp32) | COMPLETED [GATE PASSED] | Commit `33499df`. 10 epochs, B=64, 446 b/ep. Step-0 loss: 13.7184. Dev EER: 34.58% (ep 0) -> 10.26% (ep 10). Train-probe EER: 25.09% (ep 0) -> 3.55% (ep 10). Cum unique utts: 28,538 (99.996%). |
 
 ---
 
@@ -30,6 +30,7 @@
 ### Phase 2A Sanity Run C (v3): Full 251 Speakers (10 Epochs) [AUTHORITATIVE]
 - **Run ID:** `sanity_2a_full_v3`
 - **Timestamp:** 2026-11-03
+- **Git Commit:** `33499df6bbb97c7882f90497a020a8933892e9da`
 - **Platform:** Apple Silicon MacBook Pro 14-inch (Apple M3 Pro, 11 cores, 18 GB RAM, macOS 26.5 Build 25F71)
 - **Device & Precision:** `device = mps`, `torch.float32` (PYTORCH_ENABLE_MPS_FALLBACK=1)
 - **Config Hash:** `70443f48` (`configs/sanity_2a_full.yaml`)
@@ -79,6 +80,7 @@
 ### Phase 2A Sanity Run B (v3): 50-Speaker Subset (3 Epochs) [AUTHORITATIVE]
 - **Run ID:** `sanity_2a_50spk_v3`
 - **Timestamp:** 2026-11-03
+- **Git Commit:** `33499df6bbb97c7882f90497a020a8933892e9da`
 - **Platform:** Apple Silicon MacBook Pro 14-inch (Apple M3 Pro, 11 cores, 18 GB RAM, macOS 26.5 Build 25F71)
 - **Device & Precision:** `device = mps`, `torch.float32` (PYTORCH_ENABLE_MPS_FALLBACK=1)
 - **Config Hash:** `d3d0115b` (`configs/sanity_2a_50spk.yaml`)
@@ -117,6 +119,7 @@
 ### Phase 2A Sanity Run A (v3): Overfit Single Fixed Batch [AUTHORITATIVE]
 - **Run ID:** `sanity_2a_overfit_v3`
 - **Timestamp:** 2026-11-03
+- **Git Commit:** `33499df6bbb97c7882f90497a020a8933892e9da`
 - **Platform:** Apple Silicon MacBook Pro 14-inch (Apple M3 Pro, 11 cores, 18 GB RAM, macOS 26.5 Build 25F71)
 - **Device & Precision:** `device = mps`, `torch.float32` (PYTORCH_ENABLE_MPS_FALLBACK=1)
 - **Config Hash:** `88b26f9e` (configs/sanity_2a_overfit.yaml)
