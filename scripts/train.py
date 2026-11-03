@@ -392,7 +392,10 @@ def main() -> int:
 
     if cfg.training.get("overfit_batch", False):
         steps = int(cfg.training.get("overfit_steps", 300))
-        trainer.fit_overfit_batch(num_steps=steps)
+        overfit_epoch = cfg.training.get("overfit_epoch", None)
+        if overfit_epoch is not None:
+            overfit_epoch = int(overfit_epoch)
+        trainer.fit_overfit_batch(num_steps=steps, epoch=overfit_epoch)
         return 0
 
     eval_interval = int(cfg.training.get("eval_interval", 1))

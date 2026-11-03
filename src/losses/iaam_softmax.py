@@ -83,6 +83,17 @@ class IAAMSoftmax(AAMSoftmax):
             easy_margin=easy_margin,
             reduction=reduction,
         )
+        if not (0.0 <= float(min_keep_ratio) <= 1.0):
+            raise ValueError(f"min_keep_ratio must be in [0.0, 1.0], got {min_keep_ratio}")
+        if not (-1.0 <= float(tau) <= 1.0):
+            raise ValueError(f"tau must be in [-1.0, 1.0], got {tau}")
+        if not (-1.0 <= float(tau_corr) <= 1.0):
+            raise ValueError(f"tau_corr must be in [-1.0, 1.0], got {tau_corr}")
+        if int(esd) < 1:
+            raise ValueError(f"esd must be >= 1, got {esd}")
+        if int(esc) < 1:
+            raise ValueError(f"esc must be >= 1, got {esc}")
+
         self.tau = float(tau)
         self.tau_corr = float(tau_corr)
         self.esd = int(esd)
@@ -95,6 +106,7 @@ class IAAMSoftmax(AAMSoftmax):
 
         # Diagnostics for most recent batch
         self.last_diagnostics: Dict[str, Any] = {}
+        self.last_keep_mask: Optional[torch.Tensor] = None
 
         # Epoch-level diagnostic accumulators
         self.reset_epoch_diagnostics()
@@ -175,6 +187,7 @@ class IAAMSoftmax(AAMSoftmax):
                 "mean_target_cs": 0.0,
             }
             self.last_diagnostics = diag
+            self.last_keep_mask = None
             return (dummy_loss, diag) if return_diagnostics else dummy_loss
 
         # Validate label ranges
@@ -304,6 +317,7 @@ class IAAMSoftmax(AAMSoftmax):
             "epoch": curr_epoch,
         }
         self.last_diagnostics = diag
+        self.last_keep_mask = keep_mask.detach()
 
         # Update epoch accumulators
         self._epoch_total_samples += B
@@ -318,3 +332,4 @@ class IAAMSoftmax(AAMSoftmax):
 
 
 __all__ = ["IAAMSoftmax"]
+

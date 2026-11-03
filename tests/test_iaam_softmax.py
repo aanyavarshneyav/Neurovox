@@ -387,3 +387,60 @@ def test_iaam_softmax_epoch_diagnostics_aggregation():
     assert epoch_diag["loss_num_retained"] <= 18
     assert epoch_diag["loss_num_filtered"] + epoch_diag["loss_num_retained"] == 18
     assert 0.0 <= epoch_diag["loss_keep_ratio"] <= 1.0
+
+
+def test_iaam_softmax_constructor_boundary_validation():
+    """Verify constructor raises ValueError on invalid parameter boundaries."""
+    # min_keep_ratio invalid
+    with pytest.raises(ValueError, match="min_keep_ratio must be in"):
+        IAAMSoftmax(in_features=4, num_classes=3, min_keep_ratio=-0.1)
+    with pytest.raises(ValueError, match="min_keep_ratio must be in"):
+        IAAMSoftmax(in_features=4, num_classes=3, min_keep_ratio=1.1)
+
+    # tau invalid
+    with pytest.raises(ValueError, match="tau must be in"):
+        IAAMSoftmax(in_features=4, num_classes=3, tau=-1.5)
+    with pytest.raises(ValueError, match="tau must be in"):
+        IAAMSoftmax(in_features=4, num_classes=3, tau=1.2)
+
+    # tau_corr invalid
+    with pytest.raises(ValueError, match="tau_corr must be in"):
+        IAAMSoftmax(in_features=4, num_classes=3, tau_corr=-1.1)
+    with pytest.raises(ValueError, match="tau_corr must be in"):
+        IAAMSoftmax(in_features=4, num_classes=3, tau_corr=1.05)
+
+    # esd and esc invalid (< 1)
+    with pytest.raises(ValueError, match="esd must be >= 1"):
+        IAAMSoftmax(in_features=4, num_classes=3, esd=0)
+    with pytest.raises(ValueError, match="esc must be >= 1"):
+        IAAMSoftmax(in_features=4, num_classes=3, esc=0)
+
+    # Valid boundaries should succeed
+    fn = IAAMSoftmax(
+        in_features=4,
+        num_classes=3,
+        min_keep_ratio=0.0,
+        tau=-1.0,
+        tau_corr=-1.0,
+        esd=1,
+        esc=1,
+    )
+    assert fn.min_keep_ratio == 0.0
+    assert fn.tau == -1.0
+    assert fn.tau_corr == -1.0
+    assert fn.esd == 1
+    assert fn.esc == 1
+
+    fn2 = IAAMSoftmax(
+        in_features=4,
+        num_classes=3,
+        min_keep_ratio=1.0,
+        tau=1.0,
+        tau_corr=1.0,
+        esd=10,
+        esc=10,
+    )
+    assert fn2.min_keep_ratio == 1.0
+    assert fn2.tau == 1.0
+    assert fn2.tau_corr == 1.0
+

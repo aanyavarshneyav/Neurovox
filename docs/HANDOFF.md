@@ -1,46 +1,55 @@
 # Session Handoff & State Summary
 
 **Date:** 2026-11-04  
-**Current Phase:** Phase 2C Complete (IAAMSoftmax & AdaptiveDrop, Parameter-Matched ECAPA Baseline, Loss & Architecture Integration, Full Test Suite 112/112 Green)  
+**Current Phase:** Phase 2C.1 Complete (Active AdaptiveDrop Integration Verification, Constructor Boundaries, Trainer Epoch Forwarding, Full Test Suite 114/114 Green)  
 **Git Branch:** `phase-2`  
-**Test Status:** All tests passing (112 passed in 14.43s)
+**Test Status:** All tests passing (114 passed in 15.53s)
 
 ---
 
-## 1. Accomplishments This Session (Phase 2C Complete)
+## 1. Accomplishments This Session (Phase 2C.1 Complete)
 
-1. **IAAMSoftmax & AdaptiveDrop Loss (`src/losses/iaam_softmax.py`):**
-   - Implemented `IAAMSoftmax` subclassing `AAMSoftmax` with full AdaptiveDrop online label cleansing (Algorithm 1, Alam et al. IJCNN 2025).
-   - Parameters: scale $s=30.0$, angular margin $m=0.2$, filtering threshold $\tau=0.423$ ($\cos 65^\circ$), warm-up $ESD=5$, correction threshold $\tau_{\text{corr}}=0.5$, correction start $ESC=5$ (ADR-001).
-   - Strict sequence ordering preserved: **Stage 1 (Label Correction)** inspects suspicious samples with $CS(x, y) < \tau$ and rectifies them to $c^* = \arg\max_{c \neq y} CS(x, c)$ if $CS(x, c^*) \ge \tau_{\text{corr}}$ *before* **Stage 2 (Sample Filtering)** evaluates retention against rectified labels ($CS \ge \tau$).
-   - Deterministic empty-batch safeguard: if retained count $< \max(1, \lceil B \cdot \text{min\_keep\_ratio} \rceil)$ (default `min_keep_ratio=0.5`), the guard activates and retains top-$k$ samples by cosine similarity to prevent gradient collapse. Activation is explicitly logged.
-   - Robust edge cases: empty batches ($B=0$) return zero loss with attached autograd graph; small batches ($B=1, B=2$) supported; out-of-range labels and non-finite inputs raise explicit descriptive exceptions.
-   - Diagnostic exposure: exposes batch and epoch-level metrics (`num_corrected`, `num_filtered`, `num_retained`, `keep_ratio`, `guard_activated`, `mean_target_cs`, `loss`).
-   - Created standalone diagnostic tool: `scripts/diagnose_loss.py`.
+1. **Trainer Epoch Handling in Overfit Smoke (`src/training/trainer.py`, `scripts/train.py`):**
+   - Added backward-compatible optional `epoch: Optional[int] = None` argument to `Trainer.fit_overfit_batch()`.
+   - When `epoch` is provided, calls `loss_fn.set_epoch(epoch)` and records the active epoch in checkpoint metadata and terminal logging.
+   - When omitted (default), existing behavior is strictly preserved: epoch defaults to 1 (warm-up / AAM-only mode for S0, or standard margin for S1/ECAPA).
+   - Wired through `scripts/train.py` via `cfg.training.get("overfit_epoch", None)`.
+   - Updated gate evaluation to check accuracy on retained samples (`eval_acc == 100.0%`) when loss filtering is active, while continuing to check full-batch accuracy when filtering is off.
 
-2. **Parameter-Matched ECAPA-TDNN Baseline (`src/models/ecapa_tdnn.py`):**
-   - Implemented canonical ECAPA-TDNN architecture (Desplanques et al., Interspeech 2020) with Res2Net temporal blocks (scale 8), channel-wise Squeeze-and-Excitation, multi-layer aggregation (MFA), and attentive statistics pooling (ASP) with global context.
-   - Sized channel dimensions to eliminate capacity confounding against SKA-HNN (ADR-002):
-     - **Parameter-Matched ECAPA-TDNN:** `channels = [400, 400, 400, 400, 1200]`, measured via `torchinfo` at **4,123,210** total parameters (4,123,210 trainable), within **-1.07%** of SKA-HNN (4,167,700).
-     - **Standard ECAPA-TDNN ($C=1024$):** `channels = [1024, 1024, 1024, 1024, 3072]`, measured at **20,767,552** total parameters (20,767,552 trainable).
-   - Conforms strictly to Neurovox tensor contracts: accepts `(B, 80, T)` or `(B, 1, 80, T)` input and produces `(B, 192)` speaker embeddings.
-   - Verified with `EmbeddingExtractor` producing unit-norm embeddings and invariant evaluation outputs.
+2. **Active AdaptiveDrop Diagnostic (`sanity_2c_active_s0`):**
+   - Executed 100-step overfit diagnostic on Apple M3 Pro (`device = mps`, fp32) at explicit `epoch = 6` ($\ge \max(\text{ESC}, \text{ESD}) = 5$) using real LibriSpeech audio through the full SKA-HNN backbone ($4,167,700$ parameters).
+   - **Step 1:** Initial Loss = **11.9358** | Retained = **32/64**, Filtered = **32**, Corrected = **0**, KeepRatio = **0.5000**, GuardActive = **True**.
+     - With randomly initialized embeddings and prototypes on the 192D sphere, cosines cluster around 0 ($< \tau = 0.423$). The deterministic minimum keep-ratio safeguard ($0.5 \times 64 = 32$) activated as designed, retaining top-32 samples to provide non-zero gradients.
+   - **Step 100:** Final Loss = **0.000012** ($\mathbf{1,006,921.3\times}$ reduction, $\ge 100\times$ gate passed) | Retained Accuracy = **100.00%** (32/32) | Full-Batch Accuracy = **50.00%** (32/64) | Retained = **32/64**, Filtered = **32**, Corrected = **0**, GuardActive = **False** (candidate retention naturally satisfied `min_keep_ratio`).
+   - Zero NaNs detected across all steps.
 
-3. **Trainer & Configuration Integration (S0 vs S1):**
-   - S0 selects `IAAMSoftmax` while S1 selects standard `AAMSoftmax`.
-   - Verified zero architectural difference in backbone: both S0 and S1 instantiate `SKAHNN` with identical layer weights and measured 4,167,700 parameters.
-   - `Trainer.train_epoch` automatically calls `loss_fn.set_epoch(epoch)` and aggregates loss diagnostics into `train_metrics` and `history.json`.
-   - Checkpoint save and resume achieves exact numerical loss parity ($< 10^{-5}$) across both S0 and S1.
-   - Added `scripts/audit_parameters.py` conforming to `.agents/workflows/param-audit.md`.
+3. **Controlled Trainer Active-Path Integration Test (`tests/test_s0_s1_integration.py`):**
+   - Implemented `test_trainer_active_adaptivedrop_path()` using controlled identity prototypes and synthetic embeddings ($N=4, C=4$):
+     - Sample 0: clean $[1,0,0,0]$, label 0 $\to$ kept, uncorrected.
+     - Sample 1: mislabeled $[0,1,0,0]$, label 0 $\to$ rectified to label 1 ($CS = 1.0 \ge \tau_{\text{corr}}$), kept.
+     - Samples 2 & 3: outliers $\to$ uncorrected, filtered ($CS < \tau$).
+   - Case A (`min_keep_ratio=0.5`): Candidate keep ratio $2/4 = 0.5 \ge 0.5$. Proved `num_corrected=1`, `num_filtered=2`, `num_retained=2`, `guard_activated=False`, finite loss, and non-zero gradients on model and loss weights.
+   - Case B (`min_keep_ratio=0.75`): Candidate keep ratio $2/4 = 0.5 < 0.75$. Proved deterministic safeguard activation (`guard_activated=True`), retaining top-3 samples (`num_retained=3`, `keep_ratio=0.75`).
+   - Case C: Proved `Trainer.fit_overfit_batch(epoch=6)` forwards the active epoch to `loss_fn`.
 
-4. **Integration Smoke Runs (Technical Gates Passed):**
-   - `sanity_2c_smoke_s0`: S0 (SKA-HNN + IAAMSoftmax), 100 steps overfit, Initial Loss 13.6175 $\to$ Final Loss 0.000025 ($555,668\times$ reduction, 100% accuracy, 0 NaNs).
-   - `sanity_2c_smoke_s1`: S1 (SKA-HNN + AAMSoftmax), 100 steps overfit, Initial Loss 13.6175 $\to$ Final Loss 0.000025 ($555,668\times$ reduction, 100% accuracy, 0 NaNs).
-   - `sanity_2c_smoke_ecapa`: Parameter-matched ECAPA-TDNN (C=400), 100 steps overfit, Initial Loss 13.7640 $\to$ Final Loss 0.000010 ($1,427,926\times$ reduction, 100% accuracy, 0 NaNs).
+4. **Constructor Boundary Validation (`src/losses/iaam_softmax.py`, `tests/test_iaam_softmax.py`):**
+   - Added explicit validation in `IAAMSoftmax.__init__`:
+     - $0.0 \le \text{min\_keep\_ratio} \le 1.0$ (raises `ValueError` otherwise)
+     - $-1.0 \le \tau \le 1.0$ (raises `ValueError` otherwise)
+     - $-1.0 \le \tau_{\text{corr}} \le 1.0$ (raises `ValueError` otherwise)
+     - $\text{esd} \ge 1$ and $\text{esc} \ge 1$ (raises `ValueError` otherwise)
+   - Added unit test `test_iaam_softmax_constructor_boundary_validation()` verifying boundary rejections and valid edge cases.
 
-5. **Comprehensive Test Suite:**
-   - Expanded repository test suite from 92 to **112 passing tests** (10 tests in `test_iaam_softmax.py`, 6 tests in `test_ecapa_tdnn.py`, 4 tests in `test_s0_s1_integration.py`).
-   - All tests pass in 14.43s.
+5. **Clarified Experimental Ledger (`docs/RESULTS_LOG.md`):**
+   - Explicitly distinguished:
+     - `sanity_2c_smoke_s0`: Warm-up / AAM-only behavior (epoch unconfigured, defaulted to 1 $< \text{ESD}=5$).
+     - `sanity_2c_active_s0`: Active AdaptiveDrop diagnostic with explicit `epoch = 6` ($\ge \max(\text{ESC}, \text{ESD})$).
+     - Synthetic unit tests: Controlled verification of rectification, filtering, and safeguard fallback with known ground truth.
+   - Preserved all historical measurements without rewriting.
+   - Reaffirmed provenance tags: $\text{ESC}=5$ and $\tau_{\text{corr}}=0.5$ remain tagged `[Engineering Choice]` / `[External-UNVERIFIED]` as the paper specifies $\text{ESD}=5$ and $\tau=0.423$ but omits the exact correction threshold and epoch.
+
+6. **Full Test Suite Status:**
+   - 114 tests passing across the entire repository (15.53s execution).
 
 ---
 

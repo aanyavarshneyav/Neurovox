@@ -619,13 +619,25 @@ class Trainer:
         print("=" * 95)
         return self.history
 
-    def fit_overfit_batch(self, num_steps: int = 300) -> List[Dict[str, Any]]:
+    def fit_overfit_batch(
+        self,
+        num_steps: int = 300,
+        epoch: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
         """Overfit a single fixed batch to verify numerical stability and optimization dynamics.
+
+        Args:
+            num_steps: Number of optimization steps on the fixed batch.
+            epoch: Optional explicit 1-indexed epoch for loss functions with epoch-dependent
+                   schedules (e.g. IAAMSoftmax with AdaptiveDrop). If None, the existing
+                   loss epoch state is preserved (defaulting to 1 / warm-up).
 
         Gate: 100% train accuracy and loss reduced >= 100x, zero NaNs.
         """
         self.model.train()
         self.loss_fn.train()
+        if epoch is not None and hasattr(self.loss_fn, "set_epoch"):
+            self.loss_fn.set_epoch(epoch)
 
         # Fetch first batch
         batch = next(iter(self.train_loader))
@@ -638,9 +650,10 @@ class Trainer:
         data = data.to(self.device, dtype=torch.float32)
         labels = labels.to(self.device, dtype=torch.long)
 
+        current_ep = getattr(self.loss_fn, "current_epoch", 1)
         print("=" * 80)
         print(f"SANITY RUN: Overfitting Single Fixed Batch ({data.size(0)} samples)")
-        print(f"Device: {self.device} | Precision: {self.precision} | Steps: {num_steps}")
+        print(f"Device: {self.device} | Precision: {self.precision} | Steps: {num_steps} | Epoch: {current_ep}")
         print("=" * 80)
 
         initial_loss = None
@@ -680,6 +693,12 @@ class Trainer:
                 )
                 preds = torch.argmax(logits, dim=1)
                 acc = float((preds == labels).sum().item()) / labels.size(0) * 100.0
+                keep_mask = getattr(self.loss_fn, "last_keep_mask", None)
+                if keep_mask is not None and keep_mask.shape == labels.shape:
+                    retained_cnt = max(1, int(keep_mask.sum().item()))
+                    eval_acc = float((preds[keep_mask] == labels[keep_mask]).sum().item()) / retained_cnt * 100.0
+                else:
+                    eval_acc = acc
 
             loss.backward()
 
@@ -703,6 +722,7 @@ class Trainer:
                 "step": step,
                 "loss": round(loss_val, 6),
                 "acc_pct": round(acc, 2),
+                "retained_acc_pct": round(eval_acc, 2),
                 "grad_norm": round(float(norm.item() if isinstance(norm, torch.Tensor) else norm), 4),
             }
             if hasattr(self.loss_fn, "get_last_diagnostics"):
@@ -713,24 +733,45 @@ class Trainer:
 
             if step == 1 or step % 25 == 0 or step == num_steps:
                 elapsed = time.perf_counter() - t0
+                diag_str = ""
+                if hasattr(self.loss_fn, "get_last_diagnostics"):
+                    d = self.loss_fn.get_last_diagnostics()
+                    if d:
+                        diag_str = (
+                            f" | keep: {d.get('num_retained', 0)}/{d.get('batch_size', 0)} "
+                            f"(corr: {d.get('num_corrected', 0)}, drop: {d.get('num_filtered', 0)}, guard: {d.get('guard_activated', False)})"
+                        )
+                acc_label = f"Acc: {eval_acc:6.2f}%" if eval_acc == acc else f"Acc(ret): {eval_acc:5.1f}% [all:{acc:4.1f}%]"
                 print(
                     f"Step {step:03d}/{num_steps} | Loss: {loss_val:.4f} | "
-                    f"Acc: {acc:6.2f}% | GradNorm: {record['grad_norm']:.3f} | Elapsed: {elapsed:.1f}s"
+                    f"{acc_label}{diag_str} | GradNorm: {record['grad_norm']:.3f} | Elapsed: {elapsed:.1f}s"
                 )
 
         self.history = history
         self.save_history_artifacts()
-        self.save_checkpoint(self.ckpt_dir / "overfit_final.pt", 1)
+        final_ep = epoch if epoch is not None else getattr(self.loss_fn, "current_epoch", 1)
+        self.save_checkpoint(self.ckpt_dir / "overfit_final.pt", final_ep)
 
         # Technical gate check
         loss_reduction = initial_loss / max(loss_val, 1e-12)
         print("-" * 80)
         print(f"Initial Loss: {initial_loss:.4f} -> Final Loss: {loss_val:.6f} (reduction: {loss_reduction:.1f}x)")
-        print(f"Final Accuracy: {acc:.2f}%")
+        print(f"Final Accuracy: {acc:.2f}% (retained: {eval_acc:.2f}%)")
+        if hasattr(self.loss_fn, "get_last_diagnostics"):
+            final_diag = self.loss_fn.get_last_diagnostics()
+            if final_diag:
+                print(
+                    f"Final Loss Diagnostics (Step {num_steps}, Epoch {final_ep}): "
+                    f"Retained={final_diag.get('num_retained')}/{final_diag.get('batch_size')}, "
+                    f"Corrected={final_diag.get('num_corrected')}, "
+                    f"Filtered={final_diag.get('num_filtered')}, "
+                    f"KeepRatio={final_diag.get('keep_ratio')}, "
+                    f"GuardActive={final_diag.get('guard_activated')}"
+                )
         print("-" * 80)
 
-        if acc < 100.0:
-            raise RuntimeError(f"Gate Failed: Final accuracy {acc:.2f}% < 100.0%")
+        if eval_acc < 100.0:
+            raise RuntimeError(f"Gate Failed: Final retained accuracy {eval_acc:.2f}% < 100.0%")
         if loss_reduction < 100.0:
             raise RuntimeError(f"Gate Failed: Loss reduction {loss_reduction:.1f}x < 100.0x")
 

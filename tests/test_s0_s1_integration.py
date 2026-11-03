@@ -10,6 +10,7 @@ Requirements verified:
 """
 
 import json
+import math
 from pathlib import Path
 import pytest
 import torch
@@ -222,3 +223,215 @@ def test_s0_s1_resume_parity(tmp_path):
         assert abs(m2_uninterrupted["train_loss"] - m2_resumed["train_loss"]) < 1e-5, (
             f"{switch}: Loss parity mismatch: {m2_uninterrupted['train_loss']} vs {m2_resumed['train_loss']}"
         )
+
+
+class ControlledLinearModel(nn.Module):
+    """Controlled identity linear layer producing exact predictable embeddings."""
+
+    def __init__(self, dim: int = 4):
+        super().__init__()
+        self.fc = nn.Linear(dim, dim, bias=False)
+        with torch.no_grad():
+            self.fc.weight.copy_(torch.eye(dim))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.fc(x)
+
+
+class FixedBatchSampler(Sampler):
+    """Batch sampler that yields a single deterministic batch with epoch tracking."""
+
+    def __init__(self, indices):
+        self.indices = list(indices)
+        self.epoch = 0
+        self.current_epoch_indices = [self.indices]
+
+    def set_epoch(self, epoch: int):
+        self.epoch = epoch
+        self.current_epoch_indices = [self.indices]
+
+    def __iter__(self):
+        yield self.indices
+
+    def __len__(self):
+        return 1
+
+
+def test_trainer_active_adaptivedrop_path(tmp_path):
+    """Verify Trainer executes IAAMSoftmax with AdaptiveDrop active beyond warm-up.
+
+    Tests:
+    1. Active path reached at epoch >= max(ESC, ESD) = 5.
+    2. Finite loss and successful backward gradient propagation.
+    3. Exact diagnostics match known ground-truth correction and filtering counts.
+    4. Deterministic safeguard activates when candidate keep ratio falls below threshold.
+    5. Trainer.fit_overfit_batch respects the explicit epoch argument.
+    """
+    device = torch.device("cpu")
+    dim = 4
+    num_classes = 4
+
+    # 4 synthetic samples:
+    # idx 0: [1, 0, 0, 0], y=0 -> clean, cos(e0, W0)=1.0 >= tau, kept uncorrected
+    # idx 1: [0, 1, 0, 0], y=0 -> mislabeled, cos(e1, W1)=1.0 >= tau_corr, corrected to y=1, kept
+    # idx 2: [0, 0, 0, -1], y=0 -> outlier, cos(e2, Wk) <= 0, uncorrected, cos(e2, W0)=0 < tau, candidate drop
+    # idx 3: [0, 0, -1, 0], y=0 -> outlier, cos(e3, Wk) <= 0, uncorrected, cos(e3, W0)=0 < tau, candidate drop
+    x = torch.tensor(
+        [
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, -1.0],
+            [0.0, 0.0, -1.0, 0.0],
+        ],
+        dtype=torch.float32,
+    )
+    y = torch.tensor([0, 0, 0, 0], dtype=torch.long)
+    ds = TensorDataset(x, y)
+
+    # -------------------------------------------------------------------------
+    # Case A: min_keep_ratio=0.5 -> candidate keep ratio (2/4 = 0.5) >= 0.5
+    # Safeguard should NOT activate.
+    # -------------------------------------------------------------------------
+    model_a = ControlledLinearModel(dim=dim)
+    loss_fn_a = IAAMSoftmax(
+        in_features=dim,
+        num_classes=num_classes,
+        scale=10.0,
+        margin=0.2,
+        tau=0.423,
+        tau_corr=0.5,
+        esd=5,
+        esc=5,
+        min_keep_ratio=0.5,
+    )
+    with torch.no_grad():
+        loss_fn_a.weight.copy_(torch.eye(num_classes))
+
+    opt_a = torch.optim.SGD(list(model_a.parameters()) + list(loss_fn_a.parameters()), lr=0.01)
+    loader_a = DataLoader(ds, batch_sampler=FixedBatchSampler([0, 1, 2, 3]))
+
+    trainer_a = Trainer(
+        model=model_a,
+        loss_fn=loss_fn_a,
+        optimizer=opt_a,
+        train_loader=loader_a,
+        device=device,
+        run_id="test_active_drop_noguard",
+    )
+    trainer_a.ckpt_dir = tmp_path / "ckpt_a"
+    trainer_a.results_dir = tmp_path / "res_a"
+    trainer_a.ckpt_dir.mkdir(parents=True, exist_ok=True)
+    trainer_a.results_dir.mkdir(parents=True, exist_ok=True)
+
+    metrics_a = trainer_a.train_epoch(epoch=6)
+
+    # Verification: active path reached and diagnostics match exactly
+    assert metrics_a["epoch"] == 6
+    assert metrics_a["loss_num_corrected"] == 1, "Sample 1 should be corrected to class 1"
+    assert metrics_a["loss_num_filtered"] == 2, "Samples 2 and 3 should be filtered"
+    assert metrics_a["loss_num_retained"] == 2, "Samples 0 and 1 should be retained"
+    assert metrics_a["loss_keep_ratio"] == 0.5
+    assert metrics_a["loss_guard_activations"] == 0, "Safeguard must not activate when ratio >= min_keep_ratio"
+    assert math.isfinite(metrics_a["train_loss"])
+    assert metrics_a["train_loss"] > 0
+
+    # Gradient flow check
+    assert model_a.fc.weight.grad is not None
+    assert torch.isfinite(model_a.fc.weight.grad).all()
+    assert model_a.fc.weight.grad.abs().sum() > 0
+    assert loss_fn_a.weight.grad is not None
+    assert torch.isfinite(loss_fn_a.weight.grad).all()
+    assert loss_fn_a.weight.grad.abs().sum() > 0
+
+    # -------------------------------------------------------------------------
+    # Case B: min_keep_ratio=0.75 -> candidate keep ratio (2/4 = 0.5) < 0.75
+    # Safeguard MUST activate, retaining top-3 samples (keep_ratio = 0.75).
+    # -------------------------------------------------------------------------
+    model_b = ControlledLinearModel(dim=dim)
+    loss_fn_b = IAAMSoftmax(
+        in_features=dim,
+        num_classes=num_classes,
+        scale=10.0,
+        margin=0.2,
+        tau=0.423,
+        tau_corr=0.5,
+        esd=5,
+        esc=5,
+        min_keep_ratio=0.75,
+    )
+    with torch.no_grad():
+        loss_fn_b.weight.copy_(torch.eye(num_classes))
+
+    opt_b = torch.optim.SGD(list(model_b.parameters()) + list(loss_fn_b.parameters()), lr=0.01)
+    loader_b = DataLoader(ds, batch_sampler=FixedBatchSampler([0, 1, 2, 3]))
+
+    trainer_b = Trainer(
+        model=model_b,
+        loss_fn=loss_fn_b,
+        optimizer=opt_b,
+        train_loader=loader_b,
+        device=device,
+        run_id="test_active_drop_guard",
+    )
+    trainer_b.ckpt_dir = tmp_path / "ckpt_b"
+    trainer_b.results_dir = tmp_path / "res_b"
+    trainer_b.ckpt_dir.mkdir(parents=True, exist_ok=True)
+    trainer_b.results_dir.mkdir(parents=True, exist_ok=True)
+
+    metrics_b = trainer_b.train_epoch(epoch=6)
+
+    # Verification: safeguard activated
+    assert metrics_b["epoch"] == 6
+    assert metrics_b["loss_num_corrected"] == 1
+    assert metrics_b["loss_num_filtered"] == 1
+    assert metrics_b["loss_num_retained"] == 3
+    assert metrics_b["loss_keep_ratio"] == 0.75
+    assert metrics_b["loss_guard_activations"] == 1, "Safeguard must activate when ratio < min_keep_ratio"
+    assert math.isfinite(metrics_b["train_loss"])
+    assert model_b.fc.weight.grad is not None
+    assert torch.isfinite(model_b.fc.weight.grad).all()
+
+    # -------------------------------------------------------------------------
+    # Case C: Trainer.fit_overfit_batch epoch forwarding
+    # -------------------------------------------------------------------------
+    model_c = ControlledLinearModel(dim=dim)
+    loss_fn_c = IAAMSoftmax(
+        in_features=dim,
+        num_classes=num_classes,
+        esd=5,
+        esc=5,
+    )
+    opt_c = torch.optim.SGD(list(model_c.parameters()) + list(loss_fn_c.parameters()), lr=0.01)
+    loader_c = DataLoader(ds, batch_sampler=FixedBatchSampler([0, 1, 2, 3]))
+
+    trainer_c = Trainer(
+        model=model_c,
+        loss_fn=loss_fn_c,
+        optimizer=opt_c,
+        train_loader=loader_c,
+        device=device,
+        run_id="test_active_drop_overfit_batch_epoch",
+    )
+    trainer_c.ckpt_dir = tmp_path / "ckpt_c"
+    trainer_c.results_dir = tmp_path / "res_c"
+    trainer_c.ckpt_dir.mkdir(parents=True, exist_ok=True)
+    trainer_c.results_dir.mkdir(parents=True, exist_ok=True)
+
+    # Calling fit_overfit_batch with epoch=6 sets epoch on loss_fn
+    try:
+        trainer_c.fit_overfit_batch(num_steps=1, epoch=6)
+    except RuntimeError:
+        pass  # Overfit gate check (100x reduction) is expected to fail on a single synthetic step
+
+    assert loss_fn_c.current_epoch == 6
+    last_diag = loss_fn_c.get_last_diagnostics()
+    assert last_diag["epoch"] == 6
+    assert last_diag["epoch"] >= loss_fn_c.esc
+    assert last_diag["epoch"] >= loss_fn_c.esd
+    assert "num_corrected" in last_diag
+    assert "num_filtered" in last_diag
+    assert "num_retained" in last_diag
+
+
+
+
