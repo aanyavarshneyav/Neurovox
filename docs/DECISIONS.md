@@ -277,5 +277,25 @@ This document records the architectural, methodological, and experimental design
   5. **Wired Config Probabilities & Complete Metadata:** Real augmentation probabilities (`speed`, `noise`, `babble`, `rir`, `specaug`), `grad_clip`, `lr_schedule`, `dataset_size`, and `num_speakers` are wired and logged in `run_meta.json`.
   6. **Status of v2 Runs:** Mark v2 runs as `PROVISIONAL (superseded by v3)`. Establish `sanity_2a_overfit_v3`, `sanity_2a_50spk_v3`, and `sanity_2a_full_v3` as authoritative baselines.
 
+## ADR-021: Google Colab Preflight Protocol, Pinned Commit Execution, and Controlled Training Pilot Protocol (Phase 3A)
+- **Date:** 2026-11-04
+- **Status:** Accepted
+- **Context:**
+  1. Moving from local development and sanity validation to full LibriSpeech experiments on cloud GPU (Google Colab) requires rigorous preflight verification to prevent non-reproducible runs, silent configuration drift, or wasted compute units.
+  2. To guarantee bitwise cross-machine reproducibility, the Colab notebook must execute code strictly pinned to commit `720a010` (Phase 2 completion), rather than an unverified or outdated local branch.
+  3. Colab VMs are ephemeral. Storage paths must strictly route data loading and feature caches to fast local VM NVMe disks (`/content/data`, `/content/cache`), while persisting checkpoints and results to Google Drive (`/content/drive/MyDrive/Neurovox_Sync`).
+  4. Data and trial integrity must be established before committing GPU compute: partition audio files, speaker counts (251, 40, 40, 33), utterance counts (28,539, 2,703, 2,620, 2,939), 100% speaker disjointness, and 100% cross-chapter target guarantee must be verified. Existing valid trial manifests must NOT be regenerated.
+  5. The training pipeline must be validated under a controlled 1-epoch pilot for both S0 (IAAMSoftmax with AdaptiveDrop) and S1 (AAMSoftmax) under full model capacity ($C=32, C_1=256$, 4.168M params), full batch size ($B=64$), and strict fp32 precision.
+  6. AdaptiveDrop filtering and safeguard behavior across training epochs must be captured in history artifacts (`history.json`, `history.csv`) and verified.
+- **Decision:**
+  1. **Pinned Repository Execution:** `notebooks/colab_runner.ipynb` strictly checks out commit `720a010c3f356213f25b3fdb5b1b83139b50581d` and logs the commit hash and author details. Git commits are prohibited from Colab `[Engineering Choice]`.
+  2. **Comprehensive Preflight Audit:** The notebook reports GPU model, available VRAM, CUDA/PyTorch versions, system RAM, available disk space, installed dependencies, and commit SHA before launching any training workload `[Engineering Choice]`.
+  3. **Data Protocol & Trial Integrity Audit:** Integrated into `scripts/verify_trials.py --check-data`, verifying partition counts, 100% speaker disjointness across train, dev, test-clean, and test-other, and 100% cross-chapter target trials, alongside bitwise SHA-256 matching for all 8 trial files and 5 manifests `[Engineering Choice]`.
+  4. **Phase 3A Controlled Pilot Configurations:** Configured `configs/pilot_s0_full.yaml` (`pilot_s0_epoch1`) and `configs/pilot_s1_full.yaml` (`pilot_s1_epoch1`). Each executes 1 complete epoch (446 batches of $B=64$ distinct speakers) on `train-clean-100`, followed by dev-clean full-utterance evaluation (6,200 trials) `[Engineering Choice]`.
+  5. **Loss Diagnostics Propagation:** Updated `Trainer.fit()` to forward `loss_*` fields from `train_epoch()` into epoch records, ensuring `history.json` and `history.csv` capture `loss_num_corrected`, `loss_num_filtered`, `loss_num_retained`, `loss_keep_ratio`, and `loss_guard_activations` `[Engineering Choice]`.
+  6. **Empirical Compute Budget Formulation:** Compute budgets for headline experiments (S0 vs S1 across seeds 42, 123, 777) are calculated directly from empirical epoch times measured in the pilot, rather than historical MacBook estimates `[Engineering Choice]`.
+- **Consequences:** Eliminates silent reproducibility failure modes, establishes an automated audit trail before multi-epoch training, guarantees safe checkpoint persistence across Colab runtime drops, and provides accurate GPU compute unit forecasting.
+
+
 
 

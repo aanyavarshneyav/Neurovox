@@ -495,9 +495,16 @@ class Trainer:
             json.dump(self.history, f, indent=2)
 
         if self.history:
-            keys = list(self.history[0].keys())
+            # Collect unique non-nested keys across all records for clean CSV export
+            keys = []
+            seen_keys = set()
+            for r in self.history:
+                for k, v in r.items():
+                    if k not in seen_keys and not isinstance(v, (dict, list)):
+                        seen_keys.add(k)
+                        keys.append(k)
             with open(csv_path, "w", encoding="utf-8", newline="") as f:
-                writer = csv.DictWriter(f, fieldnames=keys)
+                writer = csv.DictWriter(f, fieldnames=keys, extrasaction="ignore")
                 writer.writeheader()
                 writer.writerows(self.history)
 
@@ -564,6 +571,11 @@ class Trainer:
                 "train_probe_eer_pct": None,
             }
 
+            # Forward loss diagnostics (e.g. AdaptiveDrop) into epoch history record
+            for k, v in train_metrics.items():
+                if k.startswith("loss_"):
+                    record[k] = v
+
             # Periodic full-utterance evaluation
             if (epoch % eval_interval == 0 or epoch == num_epochs) and self.dev_trials_path:
                 dev_eer, dev_mindcf, dev_eval_sec = self.evaluate_trials(self.dev_trials_path)
@@ -601,6 +613,16 @@ class Trainer:
                 else ""
             )
 
+            ad_str = ""
+            if "loss_keep_ratio" in record:
+                ad_str = (
+                    f" | keep: {record['loss_keep_ratio']:.4f} "
+                    f"(ret: {record.get('loss_num_retained', 0)}, "
+                    f"filt: {record.get('loss_num_filtered', 0)}, "
+                    f"corr: {record.get('loss_num_corrected', 0)}, "
+                    f"guard: {record.get('loss_guard_activations', 0)})"
+                )
+
             print(
                 f"[Epoch {epoch:02d}/{num_epochs:02d}] "
                 f"loss: {record['train_loss']:.4f} | "
@@ -608,7 +630,7 @@ class Trainer:
                 f"lr: {record['lr']:.2e} | "
                 f"train_time: {record['train_sec']:.1f}s | "
                 f"eval_time: {record['eval_sec']:.1f}s | "
-                f"{dev_str} | {probe_str}"
+                f"{dev_str} | {probe_str}{ad_str}"
             )
 
         # Final checkpoint

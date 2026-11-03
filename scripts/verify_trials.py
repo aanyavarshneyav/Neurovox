@@ -35,6 +35,11 @@ COMMITTED_V2_CHECKSUMS: dict[str, str] = {
 # Cryptographically committed manifest checksums
 COMMITTED_MANIFEST_CHECKSUMS: dict[str, str] = {
     "train-50spk.csv": "f63c4dc99eb41b45880fcf527aa724160e6b4860390cc7c0221a06a27f5f46da",
+    "train-clean-100.csv": "212d53386080f4a73941a1893b46a1852c41013a8b8de0669b47bb75b7ad1862",
+    "dev-clean.csv": "d906995bf50db3c29aa45734ad088d6f82d082782cc437c8ceb169f5a769cea4",
+    "test-clean.csv": "832fa18e8e8a03fb3b2e24a1fe2e7d0f555366972a91bce916ff1fbc66092379",
+    "test-other.csv": "fef5b8b7a09a9f461c6e174dc363f1544026879704072205bf43df410bf9bffe",
+    "train_spk2label.json": "15ab0fbdd43ed559439c2f91b9cb84881645879d5664a8142cfabfb0ae046c49",
 }
 
 
@@ -159,6 +164,125 @@ def verify_trials(
     return results
 
 
+def verify_data_integrity(
+    manifests_dir: Path | str | None = None,
+    trials_dir: Path | str | None = None,
+    check_audio: bool = True,
+) -> bool:
+    """Verify partition counts, speaker disjointness, and cross-chapter target integrity.
+
+    Verifies:
+      1. Speaker counts: train-clean-100 (251), dev-clean (40), test-clean (40), test-other (33).
+      2. Utterance counts: train-clean-100 (28,539), dev-clean (2,703), test-clean (2,620), test-other (2,939).
+      3. Strict pairwise speaker disjointness across all partitions.
+      4. 100% cross-chapter guarantee on genuine target trials.
+      5. Audio file existence on disk (sample check).
+    """
+    import csv
+
+    m_dir = resolve_path(manifests_dir) if manifests_dir else get_data_root() / "manifests"
+    t_dir = resolve_path(trials_dir) if trials_dir else get_data_root() / "trials"
+
+    expected_specs = {
+        "train-clean-100": {"speakers": 251, "utterances": 28539},
+        "dev-clean": {"speakers": 40, "utterances": 2703},
+        "test-clean": {"speakers": 40, "utterances": 2620},
+        "test-other": {"speakers": 33, "utterances": 2939},
+    }
+
+    print("\n" + "=" * 80)
+    print("LIBRISPEECH DATA PROTOCOL & INTEGRITY AUDIT")
+    print(f"Manifests directory: {m_dir.resolve()}")
+    print("=" * 80)
+
+    partition_speakers: dict[str, set[str]] = {}
+    all_passed = True
+
+    for split, spec in expected_specs.items():
+        csv_path = m_dir / f"{split}.csv"
+        if not csv_path.exists():
+            print(f"[-] {split:<18} ERROR: Manifest not found: {csv_path}")
+            all_passed = False
+            continue
+
+        with open(csv_path, "r", encoding="utf-8") as f:
+            reader = list(csv.DictReader(f))
+
+        spks = set(row["spk_id"] for row in reader)
+        partition_speakers[split] = spks
+        n_spk = len(spks)
+        n_utt = len(reader)
+
+        spk_ok = n_spk == spec["speakers"]
+        utt_ok = n_utt == spec["utterances"]
+
+        status = "[PASS]" if (spk_ok and utt_ok) else "[FAIL]"
+        print(
+            f"{status} {split:<18} Speakers: {n_spk:>3}/{spec['speakers']:<3} | "
+            f"Utterances: {n_utt:>5}/{spec['utterances']:<5}"
+        )
+        if not (spk_ok and utt_ok):
+            all_passed = False
+
+        # Optional audio existence check on sample of rows
+        if check_audio and len(reader) > 0:
+            sample = reader[:5] + reader[-5:]
+            existing = sum(1 for r in sample if resolve_path(r["path"]).exists())
+            if existing == len(sample):
+                print(f"       -> Audio files verified on disk for {split} (sample: {existing}/{len(sample)} found)")
+            else:
+                print(f"       -> [NOTICE] Sample audio files not yet extracted on disk ({existing}/{len(sample)} found)")
+
+    # Assert pairwise speaker disjointness
+    print("-" * 80)
+    print("Auditing speaker disjointness across partitions...")
+    splits = list(partition_speakers.keys())
+    disjoint_ok = True
+    for i in range(len(splits)):
+        for j in range(i + 1, len(splits)):
+            s1, s2 = splits[i], splits[j]
+            overlap = partition_speakers[s1].intersection(partition_speakers[s2])
+            if overlap:
+                print(f"[FAIL] Speaker leakage detected between {s1} and {s2}: {overlap}")
+                disjoint_ok = False
+                all_passed = False
+    if disjoint_ok:
+        print("[PASS] 100% Disjoint: Zero speaker overlap across train, dev, test-clean, and test-other.")
+
+    # Verify cross-chapter target guarantee in trial files
+    print("-" * 80)
+    print("Auditing 100% cross-chapter target trials guarantee...")
+    for tf_name in ["trials_dev-clean.txt", "trials_test-clean.txt", "trials_test-other.txt"]:
+        tf_path = t_dir / tf_name
+        if not tf_path.exists():
+            continue
+        total_targets = 0
+        cross_chapter = 0
+        with open(tf_path, "r", encoding="utf-8") as f:
+            for line in f:
+                parts = line.strip().split()
+                if len(parts) >= 3 and parts[0] == "1":
+                    total_targets += 1
+                    ch1 = Path(parts[1]).parent.name
+                    ch2 = Path(parts[2]).parent.name
+                    if ch1 != ch2:
+                        cross_chapter += 1
+        pct = (cross_chapter / total_targets * 100) if total_targets else 0
+        cc_ok = cross_chapter == total_targets
+        status = "[PASS]" if cc_ok else "[FAIL]"
+        print(f"{status} {tf_name:<24} Cross-chapter: {cross_chapter}/{total_targets} ({pct:.1f}%)")
+        if not cc_ok:
+            all_passed = False
+
+    print("=" * 80)
+    if all_passed:
+        print("STATUS: PASS (Dataset protocol and trial structure strictly verified)")
+    else:
+        print("STATUS: FAIL (Discrepancies found in data or trial structure)")
+    print("=" * 80)
+    return all_passed
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Verify trial lists against committed v2 SHA-256 checksums.")
     parser.add_argument(
@@ -167,10 +291,19 @@ def main() -> int:
         default=str(get_data_root() / "trials"),
         help="Path to directory containing trial lists (default: DATA_ROOT/trials)",
     )
+    parser.add_argument(
+        "--check-data",
+        action="store_true",
+        help="Also verify partition manifests, speaker counts, disjointness, and cross-chapter targets.",
+    )
     args = parser.parse_args()
 
     try:
         verify_trials(args.trials_dir, strict=True)
+        if args.check_data:
+            data_ok = verify_data_integrity(trials_dir=args.trials_dir)
+            if not data_ok:
+                return 1
         return 0
     except Exception as e:
         print(f"\n[FATAL ERROR] {e}", file=sys.stderr)
