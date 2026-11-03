@@ -143,7 +143,21 @@ Following Phase 1A measurements logged in [docs/BENCHMARKS.md](BENCHMARKS.md):
 
 ## 3c. Run Location Decision & Workload Allocation
 
-All experimental runs execute locally on Apple Silicon Mac M3 Pro (`device = mps`, `torch.float32`). Google Colab (Tesla T4) is not pursued; Colab configuration and runner (`notebooks/colab_runner.ipynb`) remain available solely as a secondary fallback if needed.
+The project operates on a dual-platform strategy:
+- **Local Development Platform (Mac M3 Pro):** Interactive development, unit testing, data manifest generation, trial generation, small-scale debug runs, and acoustic feature validation (`device = mps`, `torch.float32`).
+- **Cloud Training Platform (Google Colab, Tesla T4 GPU):** Execution of the main experimental grid across Tiers 0–3 (`device = cuda`, `fp16` with `GradScaler` or `fp32`). Fresh VM per session, ~2 CPU cores, with ~200 compute units total available.
+
+### Colab Compute Unit Budget Formula
+
+To calculate the total Colab compute unit consumption for any subset of the experimental grid:
+
+$$\text{Compute Units} = \text{runs} \times \text{epochs} \times \frac{\text{sec\_per\_epoch}}{3600} \times \text{units\_per\_hour}$$
+
+Where:
+- $\text{runs}$: Number of experimental runs in the evaluated tier or portfolio.
+- $\text{epochs}$: Number of training epochs per run (default: 30 epochs).
+- $\text{sec\_per\_epoch}$: Measured wall-clock time per epoch on Colab T4 GPU (derived from batch compute step latency $\times$ batches per epoch $+$ validation overhead).
+- $\text{units\_per\_hour}$: Colab compute unit burn rate per hour for the standard T4 GPU runtime `[TBD: read directly from Colab resource panel; do not guess]`.
 
 ### Plan-Level Compute Budget & Proposed Allocation
 

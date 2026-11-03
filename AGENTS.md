@@ -42,7 +42,7 @@
 2. **Clustered / Paired Bootstrap:** Compute 95% confidence intervals using paired bootstrap resampling over speakers or utterances (not individual trial lines). Competing models must be evaluated against identical bootstrap resample indices.
 3. **Dual minDCF Priors:** Always report minimum Detection Cost Function at BOTH $P_{\text{target}} = 0.01$ AND $P_{\text{target}} = 0.05$ (with $C_{\text{miss}} = 1.0, C_{\text{fa}} = 1.0$).
 4. **Parameter-Matched Baselines:** Baselines (Tier 0 ECAPA-TDNN) must be evaluated both parameter-matched to the scaled SKA-HNN and at standard width ($C=1024$), reporting measured `torchinfo` counts for both, to eliminate capacity confounding. No parameter figure is assumed before measurement.
-5. **Hardware & Precision Consistency:** Comparisons between competing systems must use identical hardware and numerical precision. Explicitly log device name, compute platform, and precision per run in [docs/RESULTS_LOG.md](docs/RESULTS_LOG.md).
+5. **Hardware & Precision Consistency:** All runs compared in one table must use the same hardware and precision. Explicitly log device/hardware, compute platform, numerical precision, and active augmentations per run in [docs/RESULTS_LOG.md](docs/RESULTS_LOG.md).
 
 ---
 

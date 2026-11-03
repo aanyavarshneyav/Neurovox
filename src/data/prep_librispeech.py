@@ -114,7 +114,11 @@ def scan_split_utterances(
         try:
             rel_path = str(flac_path.relative_to(project_root))
         except ValueError:
-            rel_path = str(flac_path)
+            try:
+                rel_to_data = flac_path.relative_to(get_data_root())
+                rel_path = str(Path("data") / rel_to_data)
+            except ValueError:
+                rel_path = str(flac_path)
 
         records.append(
             {

@@ -191,6 +191,13 @@ def main() -> int:
         help="Number of batches to measure per worker count (default: 30)",
     )
     parser.add_argument(
+        "--num-workers",
+        type=int,
+        nargs="+",
+        default=None,
+        help="Worker counts to benchmark (default: [0, 1, 2] on <=2 cores e.g. Colab, else [0, 2, 4, 6])",
+    )
+    parser.add_argument(
         "--use-mock-if-empty",
         action="store_true",
         help="Generate synthetic mock FLAC files if target data directory is missing/empty",
@@ -217,17 +224,22 @@ def main() -> int:
             print("Alternatively, pass --use-mock-if-empty to verify pipeline on synthetic FLAC files.")
             return 1
 
+    workers = args.num_workers
+    if workers is None:
+        cpu_count = os.cpu_count() or 2
+        workers = [0, 1, 2] if cpu_count <= 2 else [0, 2, 4, 6]
+
     print("=" * 75)
     print("NEUROVOX DATALOADER THROUGHPUT BENCHMARK")
     print(f"Data source: {data_path.resolve()} ({len(flac_files)} files found)")
     print(f"Batch size: {args.batch_size} | Batches evaluated: {args.num_batches}")
-    print("Workers evaluated: [0, 2, 4, 6]")
+    print(f"Workers evaluated: {workers}")
     print("=" * 75)
 
     dataset = LibriSpeechFLACDataset(flac_files)
     worker_results = benchmark_workers(
         dataset=dataset,
-        num_workers_list=[0, 2, 4, 6],
+        num_workers_list=workers,
         batch_size=args.batch_size,
         num_batches=args.num_batches,
     )

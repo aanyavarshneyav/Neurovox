@@ -258,3 +258,25 @@ def test_synthetic_data_pipeline_end_to_end(tmp_path):
             ch2 = Path(p2).parts[-2]
             assert ch1 != ch2, f"Target pair has same chapter: {p1} vs {p2}"
 
+
+def test_cross_machine_trial_checksum_verification(tmp_path):
+    """Verify that verify_trials correctly validates committed v2 trials and detects corruption."""
+    from scripts.verify_trials import verify_trials, COMMITTED_V2_CHECKSUMS
+
+    trials_dir = get_data_root() / "trials"
+    if trials_dir.exists() and (trials_dir / "trials_test-clean.txt").exists():
+        results = verify_trials(trials_dir, strict=True)
+        assert len(results) == len(COMMITTED_V2_CHECKSUMS)
+        for fname, r in results.items():
+            assert r["status"] is True, f"Committed trial file {fname} failed checksum verification"
+
+    # Test error handling when corrupted
+    mock_trials = tmp_path / "mock_trials"
+    mock_trials.mkdir()
+    for fname in COMMITTED_V2_CHECKSUMS:
+        (mock_trials / fname).write_text("corrupted content", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="CRITICAL: Cross-machine trial reproducibility check FAILED"):
+        verify_trials(mock_trials, strict=True)
+
+

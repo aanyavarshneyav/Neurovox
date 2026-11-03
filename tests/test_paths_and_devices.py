@@ -12,6 +12,7 @@ from src.utils.paths import (
     get_cache_root,
     get_ckpt_root,
     get_data_root,
+    get_results_root,
     resolve_path,
 )
 from scripts.check_env import get_accelerator_device
@@ -22,11 +23,13 @@ def test_default_paths():
     orig_data = os.environ.pop("DATA_ROOT", None)
     orig_cache = os.environ.pop("CACHE_ROOT", None)
     orig_ckpt = os.environ.pop("CKPT_ROOT", None)
+    orig_results = os.environ.pop("RESULTS_ROOT", None)
 
     try:
-        assert get_data_root() == PROJECT_ROOT / "data"
-        assert get_cache_root() == PROJECT_ROOT / "cache"
-        assert get_ckpt_root() == PROJECT_ROOT / "checkpoints"
+        assert get_data_root() == (PROJECT_ROOT / "data").resolve()
+        assert get_cache_root() == (PROJECT_ROOT / "cache").resolve()
+        assert get_ckpt_root() == (PROJECT_ROOT / "checkpoints").resolve()
+        assert get_results_root() == (PROJECT_ROOT / "results").resolve()
     finally:
         if orig_data:
             os.environ["DATA_ROOT"] = orig_data
@@ -34,6 +37,8 @@ def test_default_paths():
             os.environ["CACHE_ROOT"] = orig_cache
         if orig_ckpt:
             os.environ["CKPT_ROOT"] = orig_ckpt
+        if orig_results:
+            os.environ["RESULTS_ROOT"] = orig_results
 
 
 def test_env_override_paths(tmp_path):
@@ -41,28 +46,42 @@ def test_env_override_paths(tmp_path):
     custom_data = tmp_path / "custom_data"
     custom_cache = tmp_path / "custom_cache"
     custom_ckpt = tmp_path / "custom_ckpt"
+    custom_results = tmp_path / "custom_results"
 
     os.environ["DATA_ROOT"] = str(custom_data)
     os.environ["CACHE_ROOT"] = str(custom_cache)
     os.environ["CKPT_ROOT"] = str(custom_ckpt)
+    os.environ["RESULTS_ROOT"] = str(custom_results)
 
     try:
         assert get_data_root() == custom_data.resolve()
         assert get_cache_root() == custom_cache.resolve()
         assert get_ckpt_root() == custom_ckpt.resolve()
+        assert get_results_root() == custom_results.resolve()
+
+        # Dynamic routing via resolve_path
+        assert resolve_path("data/manifests/dev.csv") == (custom_data / "manifests/dev.csv").resolve()
+        assert resolve_path("cache/audio.mmap") == (custom_cache / "audio.mmap").resolve()
+        assert resolve_path("checkpoints/model.pt") == (custom_ckpt / "model.pt").resolve()
+        assert resolve_path("results/metrics.json") == (custom_results / "metrics.json").resolve()
     finally:
         del os.environ["DATA_ROOT"]
         del os.environ["CACHE_ROOT"]
         del os.environ["CKPT_ROOT"]
+        del os.environ["RESULTS_ROOT"]
 
 
 def test_resolve_path():
-    """Verify resolve_path handles relative and absolute paths properly."""
-    rel = "configs/t0_ecapa.yaml"
+    """Verify resolve_path handles relative, absolute, and custom base root paths properly."""
+    rel = "configs/base.yaml"
     assert resolve_path(rel) == PROJECT_ROOT / rel
 
     abs_path = Path("/tmp/absolute_test.txt")
     assert resolve_path(abs_path) == abs_path
+
+    # Custom base root
+    custom_root = Path("/custom/root")
+    assert resolve_path("sub/file.txt", base_root=custom_root) == custom_root / "sub/file.txt"
 
 
 def test_accelerator_device_selection():
@@ -87,17 +106,26 @@ def test_colab_runner_notebook_validity():
 
 
 def test_no_hardcoded_user_paths_in_code():
-    """Verify no hardcoded '/Users' or '/content' paths exist in src/ or scripts/ python files."""
-    for folder in [PROJECT_ROOT / "src", PROJECT_ROOT / "scripts"]:
-        for py_file in folder.rglob("*.py"):
-            text = py_file.read_text(encoding="utf-8")
-            # Exclude comments or docstrings that explicitly discuss the rule
+    """Verify no hardcoded '/Users' or '/content' paths exist in code, configs, or manifests."""
+    check_folders = [
+        PROJECT_ROOT / "src",
+        PROJECT_ROOT / "scripts",
+        PROJECT_ROOT / "configs",
+    ]
+    manifest_dir = PROJECT_ROOT / "data" / "manifests"
+    if manifest_dir.exists():
+        check_folders.append(manifest_dir)
+
+    for folder in check_folders:
+        for file_path in folder.rglob("*"):
+            if not file_path.is_file() or file_path.suffix in [".pyc", ".png", ".flac", ".tar.gz", ".zip"]:
+                continue
+            text = file_path.read_text(encoding="utf-8")
             lines = text.splitlines()
             for idx, line in enumerate(lines, start=1):
-                # Ignore docstring/comment references
                 stripped = line.strip()
+                # Ignore docstring/comment references discussing the rule
                 if stripped.startswith("#") or stripped.startswith('"""') or stripped.startswith("*"):
                     continue
-                assert "/Users/" not in line, f"Found hardcoded /Users/ in {py_file}:{idx}: {line}"
-                assert "/content/" not in line, f"Found hardcoded /content/ in {py_file}:{idx}: {line}"
-
+                assert "/Users/" not in line, f"Found hardcoded /Users/ in {file_path}:{idx}: {line}"
+                assert "/content/" not in line, f"Found hardcoded /content/ in {file_path}:{idx}: {line}"

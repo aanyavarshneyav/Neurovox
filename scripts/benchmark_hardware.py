@@ -634,17 +634,19 @@ def main() -> int:
     print(f"    Lower Bound Status: {composite_lower_res['status']} | Median: {composite_lower_res.get('median_step_ms', 'N/A')} ms | Steps/s: {composite_lower_res.get('steps_per_sec', 'N/A')}")
 
     # 5. Sustained End-to-End Pipeline WITH SKA Branches & Dilated Fully-TDNN
-    print("--> Running Sustained Composite Pipeline WITH SKA Branches (C=32, C1=256, fp32)...")
-    composite_ska_res = benchmark_module(
-        name="Composite_Pipeline_with_SKA_C32_C1_256",
-        module_fn=lambda: CompositeMockPipelineWithSKA(32, 256),
-        input_shape=(B, 1, F, T),
-        precision="fp32",
-        device=device,
-        target_duration_sec=duration * 2.0,
-    )
-    results.append(composite_ska_res)
-    print(f"    Full SKA Status: {composite_ska_res['status']} | Median: {composite_ska_res.get('median_step_ms', 'N/A')} ms | Steps/s: {composite_ska_res.get('steps_per_sec', 'N/A')} | Throttling: {composite_ska_res.get('throttling_pct', 'N/A')}%")
+    composite_precisions = ["fp32", "fp16"] if device.type == "cuda" else ["fp32"]
+    for prec in composite_precisions:
+        print(f"--> Running Sustained Composite Pipeline WITH SKA Branches (C=32, C1=256, prec={prec})...")
+        composite_ska_res = benchmark_module(
+            name=f"Composite_Pipeline_with_SKA_C32_C1_256",
+            module_fn=lambda: CompositeMockPipelineWithSKA(32, 256),
+            input_shape=(B, 1, F, T),
+            precision=prec,
+            device=device,
+            target_duration_sec=duration * 2.0,
+        )
+        results.append(composite_ska_res)
+        print(f"    Full SKA ({prec}) Status: {composite_ska_res['status']} | Median: {composite_ska_res.get('median_step_ms', 'N/A')} ms | Steps/s: {composite_ska_res.get('steps_per_sec', 'N/A')} | Throttling: {composite_ska_res.get('throttling_pct', 'N/A')}%")
 
     print("\n" + "=" * 105)
     print(f"{'Module Name':<32} {'Prec':<6} {'Median(ms)':<12} {'Steps/s':<10} {'Peak Cur(MB)':<14} {'Peak Drv(MB)':<14} {'Throttle %':<10}")
