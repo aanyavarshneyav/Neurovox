@@ -69,9 +69,10 @@ training:
   lr_max: 1.0e-3
   weight_decay: 1.0e-4
   grad_clip: 3.0
-  eval_interval: 5
+  eval_interval: 2
   seed: 42
 
 evaluation:
   eval_dev: true
   eval_train_probe: false
+

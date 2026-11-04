@@ -648,7 +648,7 @@ def test_headline_configs_validity():
     # Common headline parameters
     for cfg, label in [(cfg0, "S0"), (cfg1, "S1")]:
         assert cfg["training"]["epochs"] == 30, f"{label} epochs must be 30"
-        assert cfg["training"]["eval_interval"] == 5, f"{label} eval_interval must be 5"
+        assert cfg["training"]["eval_interval"] == 2, f"{label} eval_interval must be 2"
         assert cfg["training"]["seed"] == 42, f"{label} seed default must be 42"
         assert cfg["training"]["lr_schedule"] == "cyclic"
         assert cfg["training"]["cycle_epochs"] == 2
