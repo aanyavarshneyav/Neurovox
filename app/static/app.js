@@ -374,12 +374,12 @@
     const isShortTest = testDur != null && isFinite(testDur) && testDur >= 1.0 && testDur < 3.0;
     if (isShortEnroll || isShortTest) {
       shortWarnAlert.textContent = 'Short recording: Clips under 3 seconds may not contain enough speech information for reliable speaker verification. Try recording a little longer.';
+      shortWarnAlert.className = 'alert warn';
       shortWarnAlert.hidden = false;
-      shortWarnAlert.style.display = 'block';
     } else {
       shortWarnAlert.textContent = '';
+      shortWarnAlert.className = 'alert';
       shortWarnAlert.hidden = true;
-      shortWarnAlert.style.display = 'none';
     }
   }
 
@@ -506,11 +506,17 @@
     if (slot === 'enrollment') {
       enrollBlob = blob; enrollName = filename;
       enrollDur = (measuredDur != null && isFinite(measuredDur)) ? Number(measuredDur) : null;
-      $('#enroll-audio').src = url; $('#enroll-status').textContent = `Loaded: ${filename} (${kb} KB)`;
+      const audioEl = $('#enroll-audio');
+      audioEl.src = url;
+      audioEl.hidden = false;
+      $('#enroll-status').textContent = `Loaded: ${filename} (${kb} KB)`;
     } else {
       testBlob = blob; testName = filename;
       testDur = (measuredDur != null && isFinite(measuredDur)) ? Number(measuredDur) : null;
-      $('#test-audio').src = url; $('#test-status').textContent = `Loaded: ${filename} (${kb} KB)`;
+      const audioEl = $('#test-audio');
+      audioEl.src = url;
+      audioEl.hidden = false;
+      $('#test-status').textContent = `Loaded: ${filename} (${kb} KB)`;
     }
     updateShortWarn();
     updateVerifyState();
@@ -640,7 +646,7 @@
       const paramStr = !isNil(info.parameter_count) ? ` (${fmt(info.parameter_count)} params)` : '';
       const labelPrefix = info.model_label || "Scaled reproduction on LibriSpeech train-clean-100, not the paper's model";
       $('#model-line').innerHTML = `<strong>${esc(labelPrefix)}:</strong> ${esc(info.checkpoint_path)}${paramStr} · epoch ${esc(info.checkpoint_epoch)} · dev-clean ${term('EER')} ${num(info.dev_eer, 2)}% ${tagHtml('measured')}`;
-      if ($('#nav-val-model')) $('#nav-val-model').textContent = labelPrefix;
+      if ($('#nav-val-model')) $('#nav-val-model').textContent = info.model_name || 'ska_hnn (S0)';
       $('#nav-val-ckpt').textContent = `ep ${info.checkpoint_epoch} · ${num(info.dev_eer, 2)}% EER`;
       $('#res-threshold').textContent = thr.toFixed(4);
       $('#res-borderline').textContent = `${info.borderline_zone || `threshold +/- ${margin.toFixed(2)}`} (width ${width.toFixed(2)}: ${lo.toFixed(4)} to ${hi.toFixed(4)})`;
