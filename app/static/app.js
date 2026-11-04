@@ -1,5 +1,5 @@
-/* Neurovox demo site — presentation layer.
- * Reads live from /api/info, /api/results and /api/verify. No external requests. */
+/* Neurovox Stage 4 — Mission-Control / Telemetry Frontend
+ * Reads live from /api/info, /api/results and /api/verify. Fully offline. */
 (function () {
   'use strict';
 
@@ -10,14 +10,14 @@
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
   const NF = new Intl.NumberFormat('en-US'); // international grouping: 1,234,567
   const isNil = (v) => v === null || v === undefined || v === '' || Number.isNaN(Number(v));
-  const fmt = (n) => (isNil(n) ? '—' : NF.format(Number(n)));            // integers
-  const num = (n, d = 2) => (isNil(n) ? '—' : Number(n).toFixed(d));     // decimals
+  const fmt = (n) => (isNil(n) ? '—' : NF.format(Number(n)));
+  const num = (n, d = 2) => (isNil(n) ? '—' : Number(n).toFixed(d));
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-  /* Strip markdown / LaTeX leftovers coming from the docs-derived API strings. */
+  /* Strip markdown / LaTeX leftovers from docs-derived API strings. */
   function clean(s) {
     return String(s == null ? '' : s)
       .replace(/\$([^$]*)\$/g, '$1')
@@ -53,13 +53,12 @@
   function term(name, label) {
     return `<span class="term" tabindex="0" data-term="${esc(name)}">${esc(label || name)}</span>`;
   }
-  /* Wrap jargon found in plain (already escaped) text. Single pass: no re-matching. */
   function explain(escaped) {
     return escaped.replace(/\b(AdaptiveDrop|IAAMSoftmax|AAMSoftmax|MLASP|MLFC|minDCF|TDNN|SKA|EER)\b/g,
       (m) => term(m.toLowerCase() === 'ska' ? 'SKA' : m, m));
   }
 
-  /* Provenance tags. */
+  /* Provenance pill badges (wording preserved). */
   function tagHtml(type) {
     const t = String(type || '').toLowerCase();
     const cls = t === 'measured' ? 'tag-measured'
@@ -69,7 +68,6 @@
             : 'tag-neutral';
     return `<span class="tag ${cls}">${esc(type)}</span>`;
   }
-  /* Escape + clean + colorize "[measured]" style tags (brackets and wording preserved). */
   function rich(s, withTerms) {
     let h = esc(clean(s));
     if (withTerms) h = explain(h);
@@ -125,26 +123,33 @@
    * ===================================================================== */
   const overlay = $('#overlay');
   const modal = $('#modal');
-  const BACKGROUND_IDS = ['topbar', 'main', 'footer'];
+  const BACKGROUND_IDS = ['topbar', 'main'];
   let modalOpener = null;
   function focusables() {
     return $$('a[href],button:not([disabled]),input:not([disabled]),select,textarea,summary,[tabindex]:not([tabindex="-1"])', modal)
       .filter((el) => el.offsetParent !== null || el === document.activeElement);
   }
-  function openModal(title, html, opener) {
+  function openModal(title, html, opener, eyebrow) {
     hideTip();
     modalOpener = opener || document.activeElement;
+    $('#modal-eyebrow').textContent = eyebrow || 'TELEMETRY INSPECTOR';
     $('#modal-title').textContent = title;
     $('#modal-body').innerHTML = html;
     $('#modal-body').scrollTop = 0;
     overlay.hidden = false;
-    BACKGROUND_IDS.forEach((id) => { const el = $('#' + id); el.setAttribute('inert', ''); el.setAttribute('aria-hidden', 'true'); });
+    BACKGROUND_IDS.forEach((id) => {
+      const el = $('#' + id);
+      if (el) { el.setAttribute('inert', ''); el.setAttribute('aria-hidden', 'true'); }
+    });
     modal.focus();
   }
   function closeModal() {
     if (overlay.hidden) return;
     overlay.hidden = true;
-    BACKGROUND_IDS.forEach((id) => { const el = $('#' + id); el.removeAttribute('inert'); el.removeAttribute('aria-hidden'); });
+    BACKGROUND_IDS.forEach((id) => {
+      const el = $('#' + id);
+      if (el) { el.removeAttribute('inert'); el.removeAttribute('aria-hidden'); }
+    });
     if (modalOpener && typeof modalOpener.focus === 'function') modalOpener.focus();
     modalOpener = null;
   }
@@ -169,14 +174,16 @@
   });
 
   /* =====================================================================
-   * Tabs: real buttons, arrow-key navigation, URL hash per tab
+   * Tabs: 5 tabs (Demo, How it works, Results, Models, Rigor).
+   * Old #roadmap hash redirects to #demo.
    * ===================================================================== */
   const tabButtons = $$('[role="tab"]');
   const TAB_IDS = tabButtons.map((b) => b.dataset.tab);
   let currentTab = null;
   function activateTab(id, opts) {
     const o = Object.assign({ focus: false, updateHash: true }, opts || {});
-    if (TAB_IDS.indexOf(id) < 0) id = 'demo';
+    const requestedRoadmap = id === 'roadmap';
+    if (requestedRoadmap || TAB_IDS.indexOf(id) < 0) id = 'demo';
     const changed = id !== currentTab;
     currentTab = id;
     tabButtons.forEach((b) => {
@@ -190,7 +197,9 @@
       p.hidden = !on;
       if (on && changed) { p.classList.remove('enter'); void p.offsetWidth; p.classList.add('enter'); }
     });
-    if (o.updateHash && location.hash !== '#' + id) location.hash = id;
+    if ((o.updateHash || requestedRoadmap) && location.hash !== '#' + id) {
+      location.hash = id;
+    }
   }
   tabButtons.forEach((b) => b.addEventListener('click', () => activateTab(b.dataset.tab)));
   $('.tabs').addEventListener('keydown', (e) => {
@@ -207,13 +216,10 @@
   /* =====================================================================
    * Shared data + derived status (computed from history.csv / run_meta.json)
    * ===================================================================== */
-  // Headline runs are 30-epoch runs (configs/s0_full.yaml and s1_full.yaml: epochs: 30).
-  // The number of epochs completed always comes from history.csv.
   const PLANNED_EPOCHS = 30;
   const DATA = { info: null, results: null };
 
   const runEpochs = (run) => (run && run.epochs) || [];
-  const evalRows = (run) => runEpochs(run).filter((r) => !isNil(r.dev_eer_pct));
   function progress(run) {
     if (!run) return null;
     const k = run.num_epochs_logged || runEpochs(run).length;
@@ -223,7 +229,7 @@
     const r = runEpochs(run).find((x) => (x.loss_num_filtered || 0) > 0 || (!isNil(x.loss_keep_ratio) && x.loss_keep_ratio < 1));
     return r ? r.epoch : null;
   }
-  /* S1 is shown next to S0 only when it has logged at least as many epochs. */
+  /* S1 appears on comparison charts only when its logged epoch count is comparable to S0's. */
   function s1Comparable(s0, s1) {
     return !!(s0 && s1 && (s1.num_epochs_logged || 0) >= (s0.num_epochs_logged || 0));
   }
@@ -243,7 +249,7 @@
    * SVG line chart with hover / keyboard tooltips
    * ===================================================================== */
   function lineChart(host, o) {
-    const W = 560, H = 230, pl = 50, pr = 16, pt = 30, pb = 28;
+    const W = 560, H = 220, pl = 48, pr = 14, pt = 28, pb = 26;
     host.innerHTML = '';
     const series = (o.series || []).filter((s) => s.points && s.points.length);
     if (!series.length) return;
@@ -266,30 +272,29 @@
     for (let i = 0; i <= 4; i++) {
       const v = yMin + ((yMax - yMin) * i) / 4;
       svg += `<line class="gridline" x1="${pl}" x2="${W - pr}" y1="${sy(v).toFixed(1)}" y2="${sy(v).toFixed(1)}"/>`;
-      svg += `<text class="ax" x="${pl - 6}" y="${(sy(v) + 4).toFixed(1)}" text-anchor="end">${esc(yFmt(v))}</text>`;
+      svg += `<text class="ax" x="${pl - 6}" y="${(sy(v) + 3.5).toFixed(1)}" text-anchor="end">${esc(yFmt(v))}</text>`;
     }
     const step = Math.max(1, Math.ceil((xMax - xMin) / 10));
     for (let x = Math.ceil(xMin); x <= xMax; x += step) {
-      svg += `<text class="ax" x="${sx(x).toFixed(1)}" y="${H - 8}" text-anchor="middle">${x}</text>`;
+      svg += `<text class="ax" x="${sx(x).toFixed(1)}" y="${H - 7}" text-anchor="middle">${x}</text>`;
     }
-    svg += `<text class="ax" x="${W - pr}" y="${H - 8}" text-anchor="end" style="opacity:.0"></text>`;
     if (o.mark && o.mark.x >= xMin && o.mark.x <= xMax) {
       const mx = sx(o.mark.x);
-      svg += `<line x1="${mx.toFixed(1)}" x2="${mx.toFixed(1)}" y1="${pt}" y2="${H - pb}" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="5,4"/>`;
-      svg += `<text x="${(mx + 5).toFixed(1)}" y="${pt + 11}" font-size="10.5" font-weight="700" fill="#fbbf24">${esc(o.mark.label)}</text>`;
+      svg += `<line x1="${mx.toFixed(1)}" x2="${mx.toFixed(1)}" y1="${pt}" y2="${H - pb}" stroke="#fbbf24" stroke-width="1.4" stroke-dasharray="4,3"/>`;
+      svg += `<text x="${(mx + 5).toFixed(1)}" y="${pt + 10}" font-family="ui-monospace, monospace" font-size="10" font-weight="700" fill="#fbbf24">${esc(o.mark.label)}</text>`;
     }
     series.forEach((s) => {
       const pts = s.points.map((p) => `${sx(p.x).toFixed(1)},${sy(p.y).toFixed(1)}`).join(' ');
-      svg += `<polyline fill="none" stroke="${s.color}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" points="${pts}" style="filter:drop-shadow(0 0 4px ${s.color})"/>`;
-      s.points.forEach((p) => { svg += `<circle cx="${sx(p.x).toFixed(1)}" cy="${sy(p.y).toFixed(1)}" r="2.6" fill="${s.color}"/>`; });
+      svg += `<polyline fill="none" stroke="${s.color}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" points="${pts}" style="filter:drop-shadow(0 0 5px ${s.color})"/>`;
+      s.points.forEach((p) => { svg += `<circle cx="${sx(p.x).toFixed(1)}" cy="${sy(p.y).toFixed(1)}" r="2.5" fill="${s.color}"/>`; });
     });
     let lx = pl;
     series.forEach((s) => {
-      svg += `<rect x="${lx}" y="6" width="10" height="10" rx="3" fill="${s.color}"/><text class="legend-text" x="${lx + 15}" y="15">${esc(s.name)}</text>`;
-      lx += 22 + s.name.length * 6.3;
+      svg += `<rect x="${lx}" y="5" width="9" height="9" rx="2" fill="${s.color}"/><text class="legend-text" x="${lx + 14}" y="13">${esc(s.name)}</text>`;
+      lx += 22 + s.name.length * 6.4;
     });
-    svg += `<line class="cross" x1="0" x2="0" y1="${pt}" y2="${H - pb}" stroke="rgba(255,255,255,.4)" stroke-dasharray="3,3" style="display:none"/>`;
-    series.forEach((s, i) => { svg += `<circle class="hl hl-${i}" r="5.5" fill="${s.color}" stroke="#fff" stroke-width="1.5" style="display:none"/>`; });
+    svg += `<line class="cross" x1="0" x2="0" y1="${pt}" y2="${H - pb}" stroke="rgba(56,189,248,.45)" stroke-dasharray="3,3" style="display:none"/>`;
+    series.forEach((s, i) => { svg += `<circle class="hl hl-${i}" r="5" fill="${s.color}" stroke="#fff" stroke-width="1.5" style="display:none"/>`; });
     svg += '</svg><div class="chart-tip" hidden></div>';
     host.innerHTML = svg;
 
@@ -317,7 +322,7 @@
           anchorY = sy(p.y);
         } else { hl.style.display = 'none'; }
       });
-      tip.innerHTML = `<div><b>Epoch ${x}</b></div>${rows}`;
+      tip.innerHTML = `<div><b>EPOCH ${x}</b></div>${rows}`;
       tip.hidden = false;
       const m = el.getScreenCTM();
       const pt0 = el.createSVGPoint(); pt0.x = sx(x); pt0.y = anchorY;
@@ -347,9 +352,9 @@
   }
 
   /* =====================================================================
-   * 1. DEMO: model line, data chip, gauge, recorder, verify
+   * 1. DEMO: Top telemetry, three-pane gauge, recorder, verify
    * ===================================================================== */
-  const COLORS = { s0: '#22d3ee', s1: '#a78bfa', warn: '#fbbf24', same: '#4ade80', diff: '#fb7185' };
+  const COLORS = { s0: '#22d3ee', s1: '#38bdf8', warn: '#fbbf24', same: '#34d399', diff: '#fb7185' };
   const verifyBtn = $('#verify-btn');
   const micAlert = $('#mic-alert');
   const errorAlert = $('#error-alert');
@@ -362,7 +367,7 @@
   function updateVerifyState() { verifyBtn.disabled = !(enrollBlob && testBlob); }
 
   /* ---- gauge ---- */
-  const G = { cx: 150, cy: 140, r: 110 };
+  const G = { cx: 150, cy: 140, r: 108 };
   let gaugeThr = null;
   const polar = (v, r) => {
     const a = Math.PI * (1 - (Math.max(-1, Math.min(1, v)) + 1) / 2);
@@ -374,30 +379,31 @@
   };
   function buildGauge(thr, margin) {
     gaugeThr = thr;
-    let s = '<svg viewBox="0 0 300 186" role="img" aria-label="Score gauge from -1 to 1 with the decision threshold and borderline zone">';
+    let s = '<svg viewBox="0 0 300 184" role="img" aria-label="Score gauge from -1 to 1 with the decision threshold and borderline zone">';
+    s += `<circle cx="150" cy="140" r="88" fill="none" stroke="rgba(56,189,248,0.1)" stroke-dasharray="2,4"/>`;
     if (thr == null) {
       s += `<path d="${arcPath(-1, 1)}" fill="none" stroke="rgba(255,255,255,.14)" stroke-width="14"/>`;
     } else {
       const lo = Math.max(-1, thr - margin), hi = Math.min(1, thr + margin);
-      s += `<path d="${arcPath(-1, lo)}" fill="none" stroke="${COLORS.diff}" stroke-opacity=".75" stroke-width="14"/>`;
+      s += `<path d="${arcPath(-1, lo)}" fill="none" stroke="${COLORS.diff}" stroke-opacity=".78" stroke-width="14"/>`;
       s += `<path d="${arcPath(lo, hi)}" fill="none" stroke="${COLORS.warn}" stroke-width="14"/>`;
-      s += `<path d="${arcPath(hi, 1)}" fill="none" stroke="${COLORS.same}" stroke-opacity=".75" stroke-width="14"/>`;
+      s += `<path d="${arcPath(hi, 1)}" fill="none" stroke="${COLORS.same}" stroke-opacity=".82" stroke-width="14"/>`;
       const t1 = polar(thr, G.r - 15), t2 = polar(thr, G.r + 15), tl = polar(thr, G.r + 27);
-      s += `<line x1="${t1[0]}" y1="${t1[1]}" x2="${t2[0]}" y2="${t2[1]}" stroke="#fff" stroke-width="2.5"/>`;
-      s += `<text x="${tl[0]}" y="${tl[1]}" fill="#e9edf9" font-size="10" font-weight="700" text-anchor="middle">${thr.toFixed(2)}</text>`;
+      s += `<line x1="${t1[0]}" y1="${t1[1]}" x2="${t2[0]}" y2="${t2[1]}" stroke="#22d3ee" stroke-width="2.5"/>`;
+      s += `<text x="${tl[0]}" y="${tl[1]}" fill="#22d3ee" font-family="ui-monospace, monospace" font-size="10" font-weight="700" text-anchor="middle">${thr.toFixed(2)}</text>`;
     }
-    [[-1, '-1'], [0, '0'], [1, '1']].forEach(([v, l]) => {
-      const p = polar(v, G.r - 26);
-      s += `<text x="${p[0]}" y="${p[1] + 3}" fill="#a3aed0" font-size="10" text-anchor="middle">${l}</text>`;
+    [[-1, '-1.0'], [0, '0.0'], [1, '+1.0']].forEach(([v, l]) => {
+      const p = polar(v, G.r - 24);
+      s += `<text x="${p[0]}" y="${p[1] + 3}" fill="#97aacb" font-family="ui-monospace, monospace" font-size="9.5" text-anchor="middle">${l}</text>`;
     });
-    s += `<g id="needle"><line x1="150" y1="140" x2="150" y2="50" stroke="#fff" stroke-width="3.5" stroke-linecap="round" style="filter:drop-shadow(0 0 5px rgba(34,211,238,.9))"/><circle cx="150" cy="140" r="8" fill="#fff"/></g>`;
-    s += '<text id="g-score" x="150" y="176" text-anchor="middle" fill="#e9edf9" font-size="24" font-weight="800">—</text>';
+    s += `<g id="needle"><line x1="150" y1="140" x2="150" y2="48" stroke="#22d3ee" stroke-width="3.2" stroke-linecap="round" style="filter:drop-shadow(0 0 6px rgba(34,211,238,.95))"/><circle cx="150" cy="140" r="7" fill="#22d3ee" stroke="#031922" stroke-width="2"/></g>`;
+    s += '<text id="g-score" x="150" y="174" text-anchor="middle" fill="#22d3ee" font-family="ui-monospace, monospace" font-size="22" font-weight="800">—</text>';
     s += '</svg>';
     $('#gauge-wrap').innerHTML = s;
     $('#gauge-legend').innerHTML =
-      `<span><i style="background:${COLORS.diff}"></i>Different</span>` +
-      `<span><i style="background:${COLORS.warn}"></i>Borderline (inconclusive)</span>` +
-      `<span><i style="background:${COLORS.same}"></i>Same</span>`;
+      `<span><i style="background:${COLORS.diff}"></i>DIFFERENT</span>` +
+      `<span><i style="background:${COLORS.warn}"></i>BORDERLINE</span>` +
+      `<span><i style="background:${COLORS.same}"></i>SAME</span>`;
   }
   function animateScore(target) {
     const el = $('#g-score');
@@ -430,8 +436,16 @@
     $('#res-borderline').textContent = `${zone} (width ${width.toFixed(2)}: ${Number(band.low).toFixed(4)} to ${Number(band.high).toFixed(4)})`;
     $('#res-enroll-dur').textContent = num(d.enrollment_duration, 2) + ' s';
     $('#res-test-dur').textContent = num(d.test_duration, 2) + ' s';
+    const ckptPath = (DATA.info && DATA.info.checkpoint_path) || '';
+    const ckptEp = !isNil(d.checkpoint_epoch) ? d.checkpoint_epoch : (DATA.info && DATA.info.checkpoint_epoch);
+    if (ckptPath || !isNil(ckptEp)) {
+      $('#res-ckpt-epoch').textContent = `${ckptPath ? ckptPath + ' · ' : ''}ep ${ckptEp}`;
+    }
+    const devEer = !isNil(d.dev_eer) ? d.dev_eer : (DATA.info && DATA.info.dev_eer);
+    if (!isNil(devEer)) {
+      $('#res-dev-eer').textContent = num(devEer, 2) + '%';
+    }
     const needle = $('#needle');
-    // brief neutral state, then the needle sweeps and the verdict is revealed
     setVerdict('…', 'idle', false);
     requestAnimationFrame(() => { needle.style.transform = `rotate(${Math.max(-1, Math.min(1, score)) * 90}deg)`; });
     animateScore(score);
@@ -580,8 +594,18 @@
   function renderDemoFacts() {
     const info = DATA.info;
     if (info) {
+      const thr = Number(info.threshold);
+      const margin = Number(!isNil(info.borderline_margin) ? info.borderline_margin : 0.10);
+      const width = Number(!isNil(info.borderline_width) ? info.borderline_width : 2 * margin);
+      const lo = !isNil(info.borderline_low) ? Number(info.borderline_low) : thr - margin;
+      const hi = !isNil(info.borderline_high) ? Number(info.borderline_high) : thr + margin;
       $('#model-line').innerHTML = `<strong>Model used by this demo:</strong> ${esc(info.checkpoint_path)} · epoch ${esc(info.checkpoint_epoch)} · dev-clean ${term('EER')} ${num(info.dev_eer, 2)}% ${tagHtml('measured')}`;
-      buildGauge(Number(info.threshold), Number(!isNil(info.borderline_margin) ? info.borderline_margin : 0.10));
+      $('#nav-val-ckpt').textContent = `ep ${info.checkpoint_epoch} · ${num(info.dev_eer, 2)}% EER`;
+      $('#res-threshold').textContent = thr.toFixed(4);
+      $('#res-borderline').textContent = `${info.borderline_zone || `threshold +/- ${margin.toFixed(2)}`} (width ${width.toFixed(2)}: ${lo.toFixed(4)} to ${hi.toFixed(4)})`;
+      $('#res-ckpt-epoch').textContent = `${info.checkpoint_path} · ep ${info.checkpoint_epoch}`;
+      $('#res-dev-eer').textContent = `${num(info.dev_eer, 2)}%`;
+      buildGauge(thr, margin);
     } else {
       $('#model-line').textContent = 'Model used by this demo: unavailable (could not read /api/info).';
     }
@@ -590,12 +614,21 @@
       const chip = $('#data-chip');
       chip.textContent = `LibriSpeech train-clean-100 · ${fmt(meta.num_speakers)} speakers`;
       chip.hidden = false;
+      $('#nav-val-dataset').textContent = `LibriSpeech (${fmt(meta.num_speakers)} spk)`;
     }
   }
 
   /* =====================================================================
-   * Overlay content builders
+   * 2. HOW IT WORKS: Compact 5-stage flowchart + hand-drawn SVG icons + strip
    * ===================================================================== */
+  const STAGE_SVGS = {
+    data: `<svg class="stage-icon" viewBox="0 0 56 32" aria-hidden="true"><path d="M2 16h5l3-8 4 16 4-20 4 24 4-14 3 8 4-11 4 14 3-6h14" fill="none" stroke="#22d3ee" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    logmel: `<svg class="stage-icon" viewBox="0 0 56 32" aria-hidden="true"><g fill="#38bdf8" opacity="0.88"><rect x="3" y="18" width="5" height="11" rx="1"/><rect x="11" y="10" width="5" height="19" rx="1"/><rect x="19" y="5" width="5" height="24" rx="1" fill="#22d3ee"/><rect x="27" y="12" width="5" height="17" rx="1"/><rect x="35" y="7" width="5" height="22" rx="1" fill="#34d399"/><rect x="43" y="15" width="5" height="14" rx="1"/></g></svg>`,
+    backbone: `<svg class="stage-icon" viewBox="0 0 56 32" aria-hidden="true"><g stroke="#22d3ee" stroke-width="1.4" fill="rgba(34,211,238,0.16)"><rect x="3" y="6" width="11" height="20" rx="2"/><rect x="22" y="4" width="12" height="24" rx="2"/><rect x="42" y="8" width="11" height="16" rx="2"/><line x1="14" y1="12" x2="22" y2="10"/><line x1="14" y1="20" x2="22" y2="22"/><line x1="34" y1="12" x2="42" y2="13"/><line x1="34" y1="20" x2="42" y2="19"/></g></svg>`,
+    embedding: `<svg class="stage-icon" viewBox="0 0 56 32" aria-hidden="true"><circle cx="18" cy="16" r="11" fill="rgba(34,211,238,0.1)" stroke="#38bdf8" stroke-width="1.4" stroke-dasharray="3,2"/><line x1="18" y1="16" x2="27" y2="9" stroke="#34d399" stroke-width="2" stroke-linecap="round"/><circle cx="27" cy="9" r="2.3" fill="#34d399"/><g fill="#22d3ee"><rect x="35" y="7" width="17" height="3.5" rx="1"/><rect x="35" y="14" width="13" height="3.5" rx="1"/><rect x="35" y="21" width="19" height="3.5" rx="1"/></g></svg>`,
+    loss: `<svg class="stage-icon" viewBox="0 0 56 32" aria-hidden="true"><path d="M8 27 A20 20 0 0 1 48 27" fill="none" stroke="rgba(56,189,248,0.35)" stroke-width="1.5"/><line x1="28" y1="27" x2="17" y2="10" stroke="#34d399" stroke-width="1.8"/><line x1="28" y1="27" x2="39" y2="10" stroke="#22d3ee" stroke-width="1.8"/><path d="M21 16 A12 12 0 0 1 35 16" fill="none" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="2,2"/><circle cx="45" cy="9" r="2.2" fill="#fb7185"/></svg>`,
+  };
+
   const arch = () => (DATA.results && DATA.results.architecture) || {};
   const contracts = (prefix) => (arch().stage_contracts || []).filter((c) => String(c.stage).indexOf(prefix) === 0);
   const moduleById = (id) => (arch().clickable_modules || []).find((m) => m.id === id);
@@ -626,7 +659,7 @@
       {
         id: 'data', title: 'Speech audio',
         io: `<b>In:</b> a recording of someone talking. <b>Out:</b> short snippets of raw audio samples for the model.`,
-        foot: !isNil(meta.dataset_size) ? `${fmt(meta.dataset_size)} training utterances · ${fmt(meta.num_speakers)} speakers ${tagHtml('measured')}` : '',
+        foot: !isNil(meta.dataset_size) ? `${fmt(meta.dataset_size)} utterances · ${fmt(meta.num_speakers)} speakers ${tagHtml('measured')}` : '',
         body: () => `<p>The model is trained on LibriSpeech <code>train-clean-100</code>${!isNil(meta.dataset_size) ? `: ${fmt(meta.dataset_size)} utterances from ${fmt(meta.num_speakers)} speakers ${tagHtml('measured')}` : ''}. Each training step draws a batch of ${fmt(meta.batch_size)} short clips from different speakers ${tagHtml('measured')}.</p>` +
           (aug.length ? `<p>Augmentations switched on during training: <b>${esc(aug.join(', '))}</b>${augOff.length ? `; switched off: ${esc(augOff.join(', '))}` : ''} ${tagHtml('measured')}.</p>` : '') +
           '<p>At evaluation time each clip is used at its <b>full length</b>, with no cropping.</p>',
@@ -638,7 +671,7 @@
         body: () => `<p>The audio is converted to a ${term('log-Mel')} spectrogram: energy in 80 frequency bands for every 10 ms of sound. Training adds random masking (SpecAugment) so the model does not rely on any single band. This step has no learnable parameters.</p>` + contractTable(contracts('0.')),
       },
       {
-        id: 'backbone', title: `${'SKA-HNN'} backbone`,
+        id: 'backbone', title: 'SKA-HNN backbone',
         io: `<b>In:</b> the spectrogram. <b>Out:</b> one compact summary of the voice for the whole clip.`,
         foot: !isNil(meta.parameter_count) ? `Whole model: ${fmt(meta.parameter_count)} ${term('parameters')} ${tagHtml('measured')}` : '',
         body: () => {
@@ -678,20 +711,50 @@
     defs.forEach((d, i) => {
       const b = document.createElement('button');
       b.type = 'button';
-      b.className = 'stage-card';
+      b.className = 'stage-card corner-card';
       b.setAttribute('aria-haspopup', 'dialog');
-      b.innerHTML = `<span class="stage-num" aria-hidden="true">${i + 1}</span><h3>${esc(d.title)}</h3>` +
-        `<p class="stage-io">${d.io}</p><div class="stage-foot"><span>${d.foot}</span><span class="stage-more">Details →</span></div>`;
-      b.addEventListener('click', () => openModal(`Stage ${i + 1}: ${d.title}`, `<p>${d.io}</p>${d.body()}`, b));
+      b.innerHTML =
+        `<div class="stage-top"><span class="stage-num">STAGE 0${i + 1}</span>${STAGE_SVGS[d.id] || ''}</div>` +
+        `<h3>${esc(d.title)}</h3>` +
+        `<p class="stage-io">${d.io}</p>` +
+        `<div class="stage-foot"><span>${d.foot}</span><span class="stage-more">Details →</span></div>`;
+      b.addEventListener('click', () => openModal(`Stage ${i + 1}: ${d.title}`, `<p>${d.io}</p>${d.body()}`, b, `STAGE 0${i + 1} TELEMETRY`));
       host.appendChild(b);
-      if (i < defs.length - 1) { const a = document.createElement('div'); a.className = 'pipe-arrow'; a.setAttribute('aria-hidden', 'true'); a.textContent = '→'; host.appendChild(a); }
+      if (i < defs.length - 1) {
+        const a = document.createElement('div');
+        a.className = 'pipe-arrow';
+        a.setAttribute('aria-hidden', 'true');
+        a.innerHTML = `<svg viewBox="0 0 26 18"><line class="pipe-dash" x1="1" y1="9" x2="20" y2="9" stroke="#22d3ee" stroke-width="1.8"/><polygon points="18,4 25,9 18,14" fill="#22d3ee"/></svg>`;
+        host.appendChild(a);
+      }
     });
-    // term tooltips inside cards are decorative text; cards are buttons so strip nested focusables
     $$('.stage-card .term', host).forEach((t) => { t.removeAttribute('tabindex'); });
+
+    // Slim "one clip in, one decision out" strip below the row
+    const meta = (DATA.results.runs.s0 && DATA.results.runs.s0.meta) || {};
+    const fc1 = contracts('5.').find((c) => /FC Layer 1/i.test(c.module_name));
+    const iaam = contracts('5.').find((c) => /IAAMSoftmax/i.test(c.module_name));
+    const strip = $('#flow-strip');
+    if (strip) {
+      strip.innerHTML =
+        `<span class="flow-strip-tag">ONE CLIP IN, ONE DECISION OUT</span>` +
+        `<div class="flow-strip-nodes">` +
+        `<span class="flow-node"><b>1.</b> Speech audio (${fmt(meta.dataset_size)} utts · ${fmt(meta.num_speakers)} spk)</span>` +
+        `<span class="flow-sep">→</span>` +
+        `<span class="flow-node"><b>2.</b> 80-band log-Mel (0 params)</span>` +
+        `<span class="flow-sep">→</span>` +
+        `<span class="flow-node"><b>3.</b> SKA-HNN (${fmt(meta.parameter_count)} params)</span>` +
+        `<span class="flow-sep">→</span>` +
+        `<span class="flow-node"><b>4.</b> 192-d embedding (${fc1 ? fmt(fc1.scaled_params) : '—'} params)</span>` +
+        `<span class="flow-sep">→</span>` +
+        `<span class="flow-node"><b>5.</b> Cosine score vs threshold · IAAMSoftmax (${iaam ? fmt(iaam.scaled_params) : '—'} params)</span>` +
+        `</div>` +
+        tagHtml('measured');
+    }
   }
 
   /* =====================================================================
-   * 3. RESULTS
+   * 3. RESULTS (No S1 pill; Training time modal shows ONLY measured Mac rows)
    * ===================================================================== */
   function epochTable(run, title) {
     const rows = runEpochs(run);
@@ -717,102 +780,85 @@
       const p = progress(runs.s1);
       h += epochTable(runs.s1, `S1 (AAMSoftmax) — ${p.done ? 'trained' : 'in progress'}: ${p.k}/${p.total} epochs logged`);
     }
-    openModal('Per-epoch data', h, opener);
+    openModal('Per-epoch data', h, opener, 'EPOCH LEDGER · HISTORY.CSV');
   }
 
+  /* Training time modal: show ONLY measured Mac rows; drop every Colab / not-run-yet / pending row. */
   function openTiming(opener) {
     const runs = DATA.results.runs, b = DATA.results.benchmarks || {};
     const rows = [];
     [['Mac M3 Pro · S0 pilot (1 epoch)', runs.pilot_s0_mac], ['Mac M3 Pro · S1 pilot (1 epoch)', runs.pilot_s1_mac]].forEach(([label, run]) => {
       const e = run && run.epochs && run.epochs[0];
-      if (e) rows.push({ label, dw: e.data_loading_sec, comp: e.forward_backward_optimizer_sec, ev: e.dev_clean_eval_sec, total: e.total_sec, breakdown: true });
+      if (e) rows.push({ label, dw: e.data_loading_sec, comp: e.forward_backward_optimizer_sec, ev: e.dev_clean_eval_sec, total: e.total_sec });
     });
-    (b.colab_pilot_wallclock || []).forEach((c) => rows.push({
-      label: `${c.run_label} · ${c.platform_label}`, total: c.total_sec, breakdown: false,
-    }));
     const maxT = Math.max.apply(null, rows.map((r) => Number(r.total) || 0)) || 1;
-    const lh = 34, W = 860, left = 330, bw = 440;
-    let svg = `<svg viewBox="0 0 ${W} ${rows.length * lh + 34}" style="width:100%;height:auto" role="img" aria-label="Seconds per epoch by run">`;
-    svg += `<rect x="${left}" y="6" width="10" height="10" fill="#94a3b8"/><text x="${left + 15}" y="15" font-size="11" fill="#e9edf9">Data wait</text>`;
-    svg += `<rect x="${left + 90}" y="6" width="10" height="10" fill="#22d3ee"/><text x="${left + 105}" y="15" font-size="11" fill="#e9edf9">Compute</text>`;
-    svg += `<rect x="${left + 175}" y="6" width="10" height="10" fill="#4ade80"/><text x="${left + 190}" y="15" font-size="11" fill="#e9edf9">Dev-clean eval</text>`;
-    svg += `<rect x="${left + 295}" y="6" width="10" height="10" fill="#a78bfa"/><text x="${left + 310}" y="15" font-size="11" fill="#e9edf9">Whole run (no breakdown)</text>`;
+    const lh = 38, W = 820, left = 240, bw = 480;
+    let svg = `<svg viewBox="0 0 ${W} ${rows.length * lh + 34}" style="width:100%;height:auto" role="img" aria-label="Seconds per epoch by Mac M3 Pro pilot run">`;
+    svg += `<rect x="${left}" y="6" width="10" height="10" fill="#94a3b8"/><text x="${left + 15}" y="15" font-family="ui-monospace, monospace" font-size="11" fill="#e8f0fe">Data wait</text>`;
+    svg += `<rect x="${left + 95}" y="6" width="10" height="10" fill="#22d3ee"/><text x="${left + 110}" y="15" font-family="ui-monospace, monospace" font-size="11" fill="#e8f0fe">Compute</text>`;
+    svg += `<rect x="${left + 185}" y="6" width="10" height="10" fill="#34d399"/><text x="${left + 200}" y="15" font-family="ui-monospace, monospace" font-size="11" fill="#e8f0fe">Dev-clean eval</text>`;
     rows.forEach((r, i) => {
       const y = 30 + i * lh;
-      const lab = r.label.length > 62 ? r.label.slice(0, 60) + '…' : r.label;
-      svg += `<text x="${left - 8}" y="${y + 16}" text-anchor="end" font-size="11" fill="#a3aed0"><title>${esc(r.label)}</title>${esc(lab)}</text>`;
-      if (r.breakdown) {
-        const w1 = Math.max(2, (r.dw / maxT) * bw), w2 = (r.comp / maxT) * bw, w3 = (r.ev / maxT) * bw;
-        svg += `<rect x="${left}" y="${y}" width="${w1}" height="22" fill="#94a3b8"><title>Data wait ${num(r.dw)} s</title></rect>`;
-        svg += `<rect x="${left + w1}" y="${y}" width="${w2}" height="22" fill="#22d3ee"><title>Compute ${num(r.comp)} s</title></rect>`;
-        svg += `<rect x="${left + w1 + w2}" y="${y}" width="${w3}" height="22" fill="#4ade80"><title>Dev-clean eval ${num(r.ev)} s</title></rect>`;
-        svg += `<text x="${left + w1 + w2 + w3 + 8}" y="${y + 16}" font-size="12" font-weight="700" fill="#e9edf9">${num(r.total)} s</text>`;
-      } else {
-        const w = (r.total / maxT) * bw;
-        svg += `<rect x="${left}" y="${y}" width="${w}" height="22" fill="#a78bfa"><title>${num(r.total)} s</title></rect>`;
-        svg += `<text x="${left + w + 8}" y="${y + 16}" font-size="12" font-weight="700" fill="#e9edf9">${num(r.total)} s</text>`;
-      }
+      svg += `<text x="${left - 10}" y="${y + 15}" text-anchor="end" font-family="ui-monospace, monospace" font-size="11" fill="#97aacb">${esc(r.label)}</text>`;
+      const w1 = Math.max(3, (r.dw / maxT) * bw), w2 = (r.comp / maxT) * bw, w3 = (r.ev / maxT) * bw;
+      svg += `<rect x="${left}" y="${y}" width="${w1}" height="22" fill="#94a3b8"><title>Data wait ${num(r.dw)} s</title></rect>`;
+      svg += `<rect x="${left + w1}" y="${y}" width="${w2}" height="22" fill="#22d3ee"><title>Compute ${num(r.comp)} s</title></rect>`;
+      svg += `<rect x="${left + w1 + w2}" y="${y}" width="${w3}" height="22" fill="#34d399"><title>Dev-clean eval ${num(r.ev)} s</title></rect>`;
+      svg += `<text x="${left + w1 + w2 + w3 + 8}" y="${y + 15}" font-family="ui-monospace, monospace" font-size="12" font-weight="700" fill="#e8f0fe">${num(r.total)} s</text>`;
     });
     svg += '</svg>';
 
-    let tbl = '<div class="table-wrap"><table><thead><tr><th>Run</th><th class="n">Data wait (s)</th><th class="n">Compute (s)</th><th class="n">Dev-clean eval (s)</th><th class="n">Total (s)</th><th>Provenance</th></tr></thead><tbody>';
+    let tbl = '<div class="table-wrap"><table><thead><tr><th>Run (Mac M3 Pro)</th><th class="n">Data wait (s)</th><th class="n">Compute (s)</th><th class="n">Dev-clean eval (s)</th><th class="n">Total (s)</th><th>Provenance</th></tr></thead><tbody>';
     rows.forEach((r) => {
-      tbl += `<tr><td>${esc(r.label)}</td>` + (r.breakdown
-        ? `<td class="n">${num(r.dw)}</td><td class="n">${num(r.comp)}</td><td class="n">${num(r.ev)}</td>`
-        : '<td class="n" colspan="3">whole-run wall-clock only</td>') + `<td class="n">${num(r.total)}</td><td>${tagHtml('measured')}</td></tr>`;
+      tbl += `<tr><td>${esc(r.label)}</td><td class="n">${num(r.dw)}</td><td class="n">${num(r.comp)}</td><td class="n">${num(r.ev)}</td><td class="n">${num(r.total)}</td><td>${tagHtml('measured')}</td></tr>`;
     });
     tbl += '</tbody></table></div>';
 
     let mac = '';
     const hw = (b.hardware_throughput || []).filter((r) => !isNil(r.mac_median_ms));
     if (hw.length) {
-      mac = '<h3>Layer micro-benchmarks (Mac M3 Pro)</h3><div class="table-wrap"><table><thead><tr><th>Component</th><th>Precision</th><th class="n">Median (ms)</th><th class="n">Steps / s</th><th class="n">Peak memory (MB)</th></tr></thead><tbody>';
-      hw.forEach((r) => { mac += `<tr><td>${rich(r.component)}</td><td>${esc(r.precision)}</td><td class="n">${num(r.mac_median_ms)}</td><td class="n">${num(r.mac_steps_per_sec)}</td><td class="n">${isNil(r.mac_peak_mem_mb) ? '—' : NF.format(r.mac_peak_mem_mb)}</td></tr>`; });
+      mac = '<h3>Layer micro-benchmarks (Mac M3 Pro)</h3><div class="table-wrap"><table><thead><tr><th>Component</th><th>Precision</th><th class="n">Median (ms)</th><th class="n">Steps / s</th><th class="n">Peak memory (MB)</th><th>Provenance</th></tr></thead><tbody>';
+      hw.forEach((r) => {
+        mac += `<tr><td>${rich(r.component)}</td><td><code>${esc(r.precision)}</code></td><td class="n">${num(r.mac_median_ms)}</td><td class="n">${num(r.mac_steps_per_sec)}</td><td class="n">${isNil(r.mac_peak_mem_mb) ? '—' : NF.format(r.mac_peak_mem_mb)}</td><td>${tagHtml('measured')}</td></tr>`;
+      });
       mac += '</tbody></table></div>';
     }
-    openModal('Training time per epoch', `<p class="muted small">Seconds for one training epoch ${tagHtml('measured')}. Colab T4 rows are whole-run wall-clock times from the older code, before timing instrumentation, so they have no breakdown.</p>${svg}${tbl}${mac}`, opener);
+    openModal('Training time per epoch (Mac M3 Pro)', `<p class="muted small">Measured epoch breakdown and layer micro-benchmarks on Apple M3 Pro (<code>device = mps</code>, fp32) ${tagHtml('measured')}.</p>${svg}${tbl}${mac}`, opener, 'BENCHMARK TELEMETRY · MAC M3 PRO');
   }
 
   function renderResults() {
     const R = DATA.results, runs = R.runs, s0 = runs.s0, s1 = runs.s1;
     const meta = (s0 && s0.meta) || {};
-    const p0 = progress(s0), p1 = progress(s1);
+    const p0 = progress(s0);
     const adStart = adaptiveStartEpoch(s0);
 
-    // S1 badge
-    const badge = $('#s1-badge');
-    badge.innerHTML = '';
-    if (s1 && !s1Comparable(s0, s1)) {
-      badge.innerHTML = `<span class="badge">S1 training in progress (epoch ${p1.k}/${p1.total})</span>`;
-    }
-
-    // headline cards
+    // Headline telemetry tiles
     const stats = [];
     if (s0 && !isNil(s0.best_dev_eer_pct)) {
-      stats.push(`<div class="card stat"><span class="stat-label">S0 best dev-clean ${term('EER')}</span><span class="stat-value">${num(s0.best_dev_eer_pct)}%</span><span class="stat-sub">at epoch ${s0.best_dev_epoch}${p0 && !p0.done ? ` (epoch ${p0.k}/${p0.total} logged)` : ''} ${tagHtml('measured')}</span></div>`);
+      stats.push(`<div class="card corner-card stat"><span class="stat-label">S0 best dev-clean ${term('EER')}</span><span class="stat-value">${num(s0.best_dev_eer_pct)}%</span><span class="stat-sub">at epoch ${s0.best_dev_epoch}${p0 && !p0.done ? ` (epoch ${p0.k}/${p0.total} logged)` : ''} ${tagHtml('measured')}</span></div>`);
     }
     if (!isNil(meta.parameter_count)) {
-      stats.push(`<div class="card stat"><span class="stat-label">Model size</span><span class="stat-value">${fmt(meta.parameter_count)}</span><span class="stat-sub">${term('parameters')} (torchinfo) ${tagHtml('measured')}</span></div>`);
+      stats.push(`<div class="card corner-card stat"><span class="stat-label">Model size</span><span class="stat-value">${fmt(meta.parameter_count)}</span><span class="stat-sub">${term('parameters')} (torchinfo) ${tagHtml('measured')}</span></div>`);
     }
     if (!isNil(meta.dataset_size)) {
-      stats.push(`<div class="card stat"><span class="stat-label">Training data</span><span class="stat-value">${fmt(meta.dataset_size)}</span><span class="stat-sub">utterances · ${fmt(meta.num_speakers)} speakers ${tagHtml('measured')}</span></div>`);
+      stats.push(`<div class="card corner-card stat"><span class="stat-label">Training data</span><span class="stat-value">${fmt(meta.dataset_size)}</span><span class="stat-sub">utterances · ${fmt(meta.num_speakers)} speakers ${tagHtml('measured')}</span></div>`);
     }
     const adRows = runEpochs(s0).filter((r) => !isNil(r.loss_keep_ratio) && (adStart == null || r.epoch >= adStart));
     if (adRows.length) {
       const a = adRows[0], z = adRows[adRows.length - 1];
       const mn = Math.min.apply(null, adRows.map((r) => r.loss_keep_ratio)), mx = Math.max.apply(null, adRows.map((r) => r.loss_keep_ratio));
-      const pts = adRows.map((r, i) => `${(i / Math.max(1, adRows.length - 1) * 200).toFixed(1)},${(24 - ((r.loss_keep_ratio - mn) / (mx - mn || 1)) * 22 - 1).toFixed(1)}`).join(' ');
-      stats.push(`<div class="card stat"><span class="stat-label">${term('AdaptiveDrop')} keep ratio</span><span class="stat-value">${num(a.loss_keep_ratio * 100)}% → ${num(z.loss_keep_ratio * 100)}%</span>` +
-        `<span class="stat-sub">epoch ${a.epoch} → epoch ${z.epoch} ${tagHtml('measured')}</span><svg viewBox="0 0 200 26" preserveAspectRatio="none" aria-hidden="true"><polyline fill="none" stroke="${COLORS.s0}" stroke-width="2" points="${pts}"/></svg></div>`);
+      const pts = adRows.map((r, i) => `${(i / Math.max(1, adRows.length - 1) * 200).toFixed(1)},${(20 - ((r.loss_keep_ratio - mn) / (mx - mn || 1)) * 18 - 1).toFixed(1)}`).join(' ');
+      stats.push(`<div class="card corner-card stat"><span class="stat-label">${term('AdaptiveDrop')} keep ratio</span><span class="stat-value">${num(a.loss_keep_ratio * 100)}% → ${num(z.loss_keep_ratio * 100)}%</span>` +
+        `<span class="stat-sub">epoch ${a.epoch} → epoch ${z.epoch} ${tagHtml('measured')}</span><svg viewBox="0 0 200 22" preserveAspectRatio="none" aria-hidden="true"><polyline fill="none" stroke="${COLORS.s0}" stroke-width="2" points="${pts}"/></svg></div>`);
     }
     $('#stat-row').innerHTML = stats.join('');
 
-    // charts
+    // Charts
     const grid = $('#chart-grid');
     grid.innerHTML = '';
     function addChart(id, titleHtml) {
       const c = document.createElement('article');
-      c.className = 'card chart-card';
+      c.className = 'card corner-card chart-card';
       c.innerHTML = `<h3>${titleHtml}</h3><div class="chart" id="${id}"></div>`;
       grid.appendChild(c);
       return $('#' + id, c);
@@ -875,7 +921,7 @@
     const R = DATA.results, a = R.architecture || {};
     const runs = R.runs;
     const switches = a.ablation_switches || [];
-    let left = '<div class="card card-scroll"><h3>SKA-HNN variants (S0–S6)</h3><div class="table-wrap"><table><thead><tr><th>Switch</th><th>What it changes (one-line summary)</th><th class="n">Measured parameters</th><th class="n">Paper parameters</th><th>Status</th></tr></thead><tbody>';
+    let left = '<div class="card corner-card card-scroll"><span class="micro-label">ABLATION SWITCHES · S0 TO S6</span><h3>SKA-HNN variants (S0–S6)</h3><div class="table-wrap"><table><thead><tr><th>Switch</th><th>What it changes (one-line summary)</th><th class="n">Measured parameters</th><th class="n">Paper parameters</th><th>Status</th></tr></thead><tbody>';
     switches.forEach((s) => {
       const oneLine = PLAIN_SWITCH[s.switch] || clean(s.config_summary);
       const techTip = `${clean(s.config_summary)} (${clean(s.flags)}): ${clean(s.description)}`;
@@ -891,13 +937,13 @@
     const refs = (R.benchmarks && R.benchmarks.external_references) || [];
     let right = '<div class="col">';
     (a.baseline_models || []).forEach((m) => {
-      right += `<div class="card model-card"><h3><span>${rich(m.model_architecture, true)}</span>${tagHtml('measured')}</h3>` +
+      right += `<div class="card corner-card model-card"><span class="micro-label">TIER 0 BASELINE ARCHITECTURE</span><h3><span>${rich(m.model_architecture, true)}</span>${tagHtml('measured')}</h3>` +
         `<p class="muted small">A speaker-recognition network used as a baseline (${term('ECAPA-TDNN', 'ECAPA-TDNN')}).</p><dl class="kv">` +
         `<dt>Parameters</dt><dd>${fmt(m.measured_params)}</dd><dt>Channels</dt><dd>${esc(m.channels)}</dd>` +
         `<dt>vs SKA-HNN</dt><dd>${esc(m.delta_vs_skahnn)}</dd>${t0.code_status ? `<dt>Status</dt><dd>${esc(t0.code_status)}</dd>` : ''}</dl></div>`;
     });
     if (refs.length) {
-      right += `<div class="card model-card"><h3><span>Pretrained SpeechBrain ECAPA-TDNN</span>${tagHtml('external reference')}</h3>` +
+      right += `<div class="card corner-card model-card"><span class="micro-label">PRETRAINED VOXCELEB REFERENCE</span><h3><span>Pretrained SpeechBrain ECAPA-TDNN</span>${tagHtml('external reference')}</h3>` +
         '<p class="muted small">Trained by others on VoxCeleb; shown only as a reference point, not our model.</p>';
       refs.forEach((r) => {
         right += `<dl class="kv"><dt>Evaluated on</dt><dd>${esc(clean(r.dataset).replace(/\s*\(.*$/, ''))}</dd><dt>${term('EER')} [95% CI]</dt><dd>${esc(clean(r.eer))}</dd>` +
@@ -923,106 +969,87 @@
     }).filter(Boolean);
     const ci = refs[0] ? `${clean(refs[0].eer)}` : '';
     const items = [
-      ['Full-utterance evaluation', 'Every test clip is scored at its full length, with no cropping.', ''],
-      ['Fixed v2 trial lists', 'Test pairs come from versioned trial lists whose files are fingerprinted with a hash, so everyone scores the same pairs.', hashes.join('\n')],
-      ['dev-clean for model selection only', `The dev-clean set is used only to pick the best checkpoint and the demo's decision ${term('threshold')}.`, ''],
-      ['Speaker-level bootstrap intervals', 'Confidence intervals are computed by resampling speakers rather than individual trials.', ci ? `Example (external reference): EER ${ci}` : ''],
-      ['Parameters are measured', `Every parameter count on this site comes from torchinfo, never from hand counting.${!isNil(meta.parameter_count) ? '' : ''}`, !isNil(meta.parameter_count) ? `S0 / S1: ${fmt(meta.parameter_count)} parameters` : ''],
-      ['fp32 precision', 'Training and evaluation run in 32-bit floating point.', meta.precision || meta.device ? `Recorded in run_meta.json: precision ${meta.precision || '—'} on ${meta.device || '—'}` : ''],
+      ['PROTOCOL 01', 'Full-utterance evaluation', 'Every test clip is scored at its full length, with no cropping.', `Eval mode: full waveform · 16 kHz mono`],
+      ['PROTOCOL 02', 'Fixed v2 trial lists', 'Test pairs come from versioned trial lists whose files are fingerprinted with a hash, so everyone scores the same pairs.', hashes.join(' | ')],
+      ['PROTOCOL 03', 'dev-clean for model selection only', `The dev-clean set is used only to pick the best checkpoint and the demo's decision ${term('threshold')}.`, `6,200 cross-chapter trials · zero speaker overlap`],
+      ['PROTOCOL 04', 'Speaker-level bootstrap intervals', 'Confidence intervals are computed by resampling speakers rather than individual trials.', ci ? `Example (external reference): EER ${ci}` : ''],
+      ['PROTOCOL 05', 'Parameters are measured', `Every parameter count on this site comes from torchinfo, never from hand counting.`, !isNil(meta.parameter_count) ? `S0 / S1: ${fmt(meta.parameter_count)} parameters` : ''],
+      ['PROTOCOL 06', 'fp32 precision', 'Training and evaluation run in 32-bit floating point.', meta.precision || meta.device ? `Recorded in run_meta.json: precision ${meta.precision || '—'} on ${meta.device || '—'}` : ''],
     ];
     $('#rigor-grid').innerHTML = items.map((it) =>
-      `<article class="card rigor-item"><span class="tick" aria-hidden="true">✓</span><h3>${esc(it[0])}</h3><p>${it[1]}</p>` +
-      (it[2] ? it[2].split('\n').map((l) => `<span class="fact">${esc(l)}</span>`).join('') : '') + '</article>').join('');
+      `<article class="card corner-card rigor-item"><div class="rigor-head"><span class="micro-label">${esc(it[0])}</span><span class="tick" aria-hidden="true">✓</span></div>` +
+      `<h3>${esc(it[1])}</h3><p>${it[2]}</p>` +
+      (it[3] ? `<div class="fact">${esc(it[3])}</div>` : '') + '</article>').join('');
   }
 
   /* =====================================================================
-   * 6. ROADMAP
+   * Polished "About this project" overlay
    * ===================================================================== */
-  function tierView(t, i, runs) {
-    let training = t.training_status;
-    let state = /^\s*pending/i.test(t.training_status || '') ? 'pending' : 'partial';
-    if (i === 1) {
-      const p0 = progress(runs.s0), p1 = progress(runs.s1);
-      const part = (label, run, p) => (p ? (p.done ? `${label} trained (${p.k}/${p.total} epochs, best dev EER ${num(run.best_dev_eer_pct)}% [measured])` : `${label} training in progress (epoch ${p.k}/${p.total})`) : `${label} pending`);
-      training = `${part('S0', runs.s0, p0)}; ${part('S1', runs.s1, p1)}`;
-      state = (p0 && p0.done && p1 && p1.done) ? 'done' : 'active';
-    }
-    return { training, state };
-  }
-  const STATE_LABEL = { done: 'trained', active: 'in progress', partial: 'partly done', pending: 'pending' };
+  const ABOUT_ICONS = {
+    scope: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>`,
+    paper: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c4b5fd" stroke-width="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
+    eng: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.09a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+    open: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+  };
 
-  function renderRoadmap() {
-    const R = DATA.results, tiers = R.tiers || [];
-    $('#timeline').innerHTML = tiers.map((t, i) => {
-      const v = tierView(t, i, R.runs);
-      const tl = String(t.tier || `Tier ${i}`).replace('Tier ', 'T');
-      return `<div class="tl-node ${v.state}"><div class="tl-rail"><span class="tl-dot"></span><span class="tl-bar"></span></div>` +
-        `<article class="card tl-card"><h3>${esc(tl)} · ${rich(t.name, true)}</h3>` +
-        `<div class="row"><b>Progress</b><span class="tag tag-neutral" style="align-self:flex-start">${esc(STATE_LABEL[v.state])}</span></div>` +
-        `<div class="row"><b>Code</b><span>${rich(t.code_status, true)}</span></div>` +
-        `<div class="row"><b>Training</b><span>${rich(v.training, true)}</span></div>` +
-        `<div class="row"><b>Details</b><span>${rich(t.details, true)}</span></div></article></div>`;
-    }).join('');
-
-    // pending timing / Colab rows
-    const b = R.benchmarks || {};
-    const colabHw = (b.hardware_throughput || []).filter((r) => isNil(r.colab_median_ms));
-    const colabDl = (b.dataloader_colab || []).filter((r) => isNil(r.samples_per_sec));
-    const missing = ((R.sources && R.sources.missing) || []).filter((s) => /colab/i.test(s));
-    const extra = $('#roadmap-extra');
-    if (colabHw.length || colabDl.length || missing.length) {
-      extra.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">' +
-        '<div><h3 style="margin-bottom:4px">Timing and Colab T4 items</h3><ul class="small" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:2px">' +
-        (missing.length ? `<li>Per-epoch Colab T4 pilot logs (data wait / compute / dev eval): no log file yet for ${missing.map((m) => `<code>${esc(m.replace(/^results\//, '').replace(/\/history\.csv$/, ''))}</code>`).join(', ')} ${tagHtml('pending')}</li>` : '') +
-        (colabHw.length ? `<li>Colab T4 layer micro-benchmarks: ${colabHw.length} of ${(b.hardware_throughput || []).length} rows TBD ${tagHtml('pending')}</li>` : '') +
-        (colabDl.length ? `<li>Colab T4 DataLoader throughput: ${colabDl.length} of ${(b.dataloader_colab || []).length} rows TBD ${tagHtml('pending')}</li>` : '') +
-        '</ul></div><button type="button" class="btn" id="btn-roadmap-timing">View pilot timing &amp; Colab T4 table</button></div>';
-      extra.hidden = false;
-      $('#btn-roadmap-timing', extra).addEventListener('click', (e) => openTiming(e.currentTarget));
-    }
-  }
-
-  /* =====================================================================
-   * About overlay
-   * ===================================================================== */
   function openAbout(opener) {
     const R = DATA.results;
     const meta = (R && R.runs && R.runs.s0 && R.runs.s0.meta) || {};
-    const sw = R && R.architecture && R.architecture.ablation_switches || [];
+    const sw = (R && R.architecture && R.architecture.ablation_switches) || [];
     const s1 = sw.find((s) => s.switch === 'S1'), s5 = sw.find((s) => s.switch === 'S5');
     const parseM = (s) => { const m = /([\d.]+)M/.exec(s || ''); return m ? parseFloat(m[1]) : null; };
+    const paperM = (s1 && parseM(s1.paper_params)) || 30.91;
+    const oursParams = !isNil(meta.parameter_count) ? Number(meta.parameter_count) : (s1 ? Number(s1.measured_params) : 4167700);
+    const scalePct = Math.max(2, Math.min(100, (oursParams / (paperM * 1e6)) * 100));
+
     let note = '';
     if (s1 && s5) {
       const p1 = parseM(s1.paper_params), p5 = parseM(s5.paper_params);
       const dPaper = p1 != null && p5 != null ? (p1 - p5) : null;
       const dMeas = s1.measured_params - s5.measured_params;
-      note = `<div class="notice"><p>The paper's Table II lists S1 at <b>${esc(s1.paper_params)}</b> ${tagHtml('paper')} and S5 (vanilla 2-D CNN) at <b>${esc(s5.paper_params)}</b> ${tagHtml('paper')}` +
+      note = `<div class="open-question-card"><h3>${ABOUT_ICONS.open}Open note: S1 → S5 parameter count</h3><p>The paper's Table II lists S1 at <b>${esc(s1.paper_params)}</b> ${tagHtml('paper')} and S5 (vanilla 2-D CNN) at <b>${esc(s5.paper_params)}</b> ${tagHtml('paper')}` +
         (dPaper != null ? `, a drop of ${dPaper.toFixed(2)}M (${(dPaper / p1 * 100).toFixed(1)}%)` : '') + `. In our torchinfo-audited implementation, replacing the SKA blocks with standard convolutions changes the count from <b>${fmt(s1.measured_params)}</b> (S1 ${tagHtml('measured')}) to <b>${fmt(s5.measured_params)}</b> (S5 ${tagHtml('measured')}), a difference of ${fmt(dMeas)} parameters (${(dMeas / s1.measured_params * 100).toFixed(2)}%) at the scaled width, or about 1.49M at full width. Even removing the whole 2-D CNN front end at full scale removes only about 1.65M in its convolution blocks. So the paper's larger drop between S1 and S5 cannot come from swapping SKA for plain convolutions at fixed channel widths; this is an <b>open question</b> in the published numbers.</p></div>`;
     }
+
     const html =
-      '<div><h3>Dataset scope</h3><p>' +
-      `Training uses LibriSpeech <code>train-clean-100</code>${!isNil(meta.num_speakers) ? `: ${fmt(meta.num_speakers)} speakers and ${fmt(meta.dataset_size)} utterances ${tagHtml('measured')}` : ''}. ` +
+      `<div class="about-stats">` +
+      `<div class="about-tile"><span class="micro-label">TRAINING SPEAKERS</span><span class="about-tile-val">${fmt(meta.num_speakers)}</span><span class="small muted">LibriSpeech train-clean-100 ${tagHtml('measured')}</span></div>` +
+      `<div class="about-tile"><span class="micro-label">TRAINING UTTERANCES</span><span class="about-tile-val">${fmt(meta.dataset_size)}</span><span class="small muted">16 kHz mono FLAC ${tagHtml('measured')}</span></div>` +
+      `<div class="about-tile"><span class="micro-label">MODEL PARAMETERS</span><span class="about-tile-val">${fmt(oursParams)}</span><span class="small muted">torchinfo audited ${tagHtml('measured')}</span></div>` +
+      `</div>` +
+      `<div class="about-scale-card">` +
+      `<h3>${ABOUT_ICONS.scope}Dataset scope &amp; model scale comparison</h3>` +
+      `<p>Training uses LibriSpeech <code>train-clean-100</code>${!isNil(meta.num_speakers) ? `: ${fmt(meta.num_speakers)} speakers and ${fmt(meta.dataset_size)} utterances ${tagHtml('measured')}` : ''}. ` +
       `The network widths are scaled down (C=32, C1=256) from the paper's VoxCeleb2 setup (5,994 speakers, C=128, C1=512, 30.91M parameters ${tagHtml('paper')})` +
       `${!isNil(meta.parameter_count) ? `; this model has ${fmt(meta.parameter_count)} parameters ${tagHtml('measured')}` : ''}, to suit a small speaker pool and a laptop. ` +
-      'The test sets each contain 29 qualifying multi-chapter speakers, so confidence intervals are roughly ±1.0% wide.</p></div>' +
-      '<div class="two-col"><div><h3>From the paper</h3><ul>' +
+      `The test sets each contain 29 qualifying multi-chapter speakers, so confidence intervals are roughly ±1.0% wide.</p>` +
+      `<div class="scale-bars">` +
+      `<div class="scale-row"><span>Paper full-scale (C=128)</span><div class="scale-track"><div class="scale-fill-paper" style="width:100%"></div></div><span class="n">30.91M ${tagHtml('paper')}</span></div>` +
+      `<div class="scale-row"><span>This project (C=32)</span><div class="scale-track"><div class="scale-fill-ours" style="width:${scalePct.toFixed(2)}%"></div></div><span class="n">${fmt(oursParams)} ${tagHtml('measured')}</span></div>` +
+      `</div></div>` +
+      `<div class="two-col">` +
+      `<div class="about-card"><h3>${ABOUT_ICONS.paper}From the paper</h3><ul>` +
       `<li>${tagHtml('paper')} 80-dimensional log-Mel input (25 ms window, 10 ms hop), 180-frame training segments, batches of 64 distinct speakers.</li>` +
       `<li>${tagHtml('paper')} 2-D CNN → TDNN-LSTM → Fully-TDNN → MLFC → MLASP → two fully connected layers (192-dimensional embedding).</li>` +
       `<li>${tagHtml('paper')} Loss settings s=30, m=0.2, AdaptiveDrop threshold 0.423, filtering from epoch 5.</li></ul></div>` +
-      '<div><h3>Engineering choices of this project</h3><ul>' +
-      '<li>Scaled widths (C=32, C1=256, attention width 128).</li>' +
-      '<li>Label-correction start at epoch 5, and a safeguard that keeps at least half of each batch.</li>' +
-      '<li>Local statistics in fp32 with a small variance floor; replicate padding.</li>' +
-      '<li>On-the-fly babble and colored-noise augmentation in place of MUSAN; reverberation switched off on the Mac.</li>' +
-      '<li>Taken from outside the paper and not verified: the label-correction threshold 0.5, the SKA branch dilations (1 and 2) and reduction ratio (8), and the local-statistics window of 21 frames.</li></ul></div></div>' +
-      `<div><h3>Open note: S1 → S5 parameter count</h3>${note || '<p class="muted">Parameter data is unavailable.</p>'}</div>`;
-    openModal('About this project', html, opener);
+      `<div class="about-card"><h3>${ABOUT_ICONS.eng}Engineering choices of this project</h3><ul>` +
+      `<li>Scaled widths (C=32, C1=256, attention width 128).</li>` +
+      `<li>Label-correction start at epoch 5, and a safeguard that keeps at least half of each batch.</li>` +
+      `<li>Local statistics in fp32 with a small variance floor; replicate padding.</li>` +
+      `<li>On-the-fly babble and colored-noise augmentation in place of MUSAN; reverberation switched off on the Mac.</li>` +
+      `<li>Taken from outside the paper and not verified: the label-correction threshold 0.5, the SKA branch dilations (1 and 2) and reduction ratio (8), and the local-statistics window of 21 frames.</li></ul></div>` +
+      `</div>` +
+      (note || '');
+    openModal('About this project', html, opener, 'PROJECT SPECIFICATION & PROVENANCE');
   }
 
   /* =====================================================================
    * Boot
    * ===================================================================== */
-  $('#about-btn').addEventListener('click', (e) => { if (DATA.results) openAbout(e.currentTarget); else openModal('About this project', '<p class="muted">Project data is still loading.</p>', e.currentTarget); });
+  $('#about-btn').addEventListener('click', (e) => {
+    if (DATA.results) openAbout(e.currentTarget);
+    else openModal('About this project', '<p class="muted">Project data is still loading.</p>', e.currentTarget, 'PROJECT SPECIFICATION & PROVENANCE');
+  });
   $('#btn-view-data').addEventListener('click', (e) => { if (DATA.results) openViewData(e.currentTarget); });
   $('#btn-view-timing').addEventListener('click', (e) => { if (DATA.results) openTiming(e.currentTarget); });
 
@@ -1042,7 +1069,7 @@
     DATA.results = results.status === 'fulfilled' ? results.value : null;
     safe(renderDemoFacts);
     if (!DATA.results) {
-      ['#pipeline', '#chart-grid', '#models-split', '#rigor-grid', '#timeline'].forEach((s) => {
+      ['#pipeline', '#chart-grid', '#models-split', '#rigor-grid'].forEach((s) => {
         $(s).innerHTML = '<p class="muted">Project data could not be loaded. Please refresh the page.</p>';
       });
       return;
@@ -1051,7 +1078,14 @@
     safe(renderResults, '#chart-grid');
     safe(renderModels, '#models-split');
     safe(renderRigor, '#rigor-grid');
-    safe(renderRoadmap, '#timeline');
+    const qOverlay = new URLSearchParams(location.search).get('overlay');
+    if (qOverlay === 'about') openAbout($('#about-btn'));
+    else if (qOverlay === 'timing') openTiming($('#btn-view-timing'));
+    else if (qOverlay === 'data') openViewData($('#btn-view-data'));
+    else if (qOverlay === 'stage') {
+      const st = $$('.stage-card')[2] || $$('.stage-card')[0];
+      if (st) st.click();
+    }
   }
 
   activateTab(location.hash.replace('#', '') || 'demo', { updateHash: false });
