@@ -558,3 +558,75 @@ def test_load_checkpoint_cuda_rng_device_mapping(tmp_path, monkeypatch):
     assert isinstance(restored_state[0], torch.Tensor)
     assert restored_state[0].device.type == "cpu", "CUDA RNG state passed to set_rng_state must be on CPU"
 
+
+def test_step_0_baseline_excluded_from_epoch_1_diagnostics(tmp_path):
+    """Verify baseline forward pass before epoch 1 is excluded from epoch-1 diagnostics."""
+    from src.losses.iaam_softmax import IAAMSoftmax
+
+    device = torch.device("cpu")
+    num_classes = 4
+    batch_size = 4
+    num_batches = 3
+    model = small_tdnn_se(in_features=80, channels=16, emb_dim=32).to(device)
+    loss_fn = IAAMSoftmax(
+        in_features=32,
+        num_classes=num_classes,
+        scale=10.0,
+        margin=0.2,
+        esd=1,
+        esc=1,
+        min_keep_ratio=0.5,
+    ).to(device)
+    opt = torch.optim.Adam(list(model.parameters()) + list(loss_fn.parameters()), lr=1e-3)
+    loader = build_synthetic_loader(batch_size=batch_size, num_batches=num_batches, num_classes=num_classes)
+
+    trainer = Trainer(
+        model=model,
+        loss_fn=loss_fn,
+        optimizer=opt,
+        train_loader=loader,
+        device=device,
+        run_id="test_step_0_diag_exclusion",
+    )
+    trainer.ckpt_dir = tmp_path / "ckpt"
+    trainer.results_dir = tmp_path / "res"
+    trainer.ckpt_dir.mkdir(parents=True, exist_ok=True)
+    trainer.results_dir.mkdir(parents=True, exist_ok=True)
+
+    history = trainer.fit(num_epochs=1, start_epoch=1)
+
+    assert trainer.step_0_loss is not None, "step_0 baseline forward pass must run"
+    epoch1_record = history[0]
+
+    # Baseline forward pass before epoch 1 must be excluded from epoch-1 diagnostics
+    assert epoch1_record["loss_batches"] == num_batches, (
+        f"Expected loss_batches == {num_batches}, got {epoch1_record['loss_batches']}"
+    )
+    assert epoch1_record["loss_total_samples"] == num_batches * batch_size, (
+        f"Expected loss_total_samples == {num_batches * batch_size}, got {epoch1_record['loss_total_samples']}"
+    )
+
+    # Verify timing instrumentation columns
+    assert "data_loading_sec" in epoch1_record
+    assert "forward_backward_optimizer_sec" in epoch1_record
+    assert "dev_clean_eval_sec" in epoch1_record
+    assert "total_sec" in epoch1_record
+    assert "peak_gpu_memory_bytes" in epoch1_record
+    assert "num_workers" in epoch1_record
+
+    # Verify history.csv contains the added columns
+    csv_path = trainer.results_dir / "history.csv"
+    assert csv_path.exists()
+    with open(csv_path, "r", encoding="utf-8") as f:
+        header = f.readline().strip().split(",")
+    for col in [
+        "data_loading_sec",
+        "forward_backward_optimizer_sec",
+        "dev_clean_eval_sec",
+        "total_sec",
+        "peak_gpu_memory_bytes",
+        "num_workers",
+    ]:
+        assert col in header, f"Column {col} missing from history.csv header"
+
+

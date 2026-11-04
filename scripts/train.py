@@ -12,6 +12,7 @@ Supports:
 
 import argparse
 import hashlib
+import json
 from pathlib import Path
 import random
 import shutil
@@ -390,16 +391,33 @@ def main() -> int:
         else:
             print(f"No previous checkpoint found in {ckpt_dir}. Starting from scratch.")
 
+    def update_run_meta() -> None:
+        peak_gpu_mem = (
+            int(torch.cuda.max_memory_allocated(device))
+            if torch.cuda.is_available() and device.type == "cuda"
+            else (int(torch.cuda.max_memory_allocated()) if torch.cuda.is_available() else 0)
+        )
+        meta_path = results_dir / "run_meta.json"
+        if meta_path.exists():
+            with open(meta_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+            meta["peak_gpu_memory_bytes"] = peak_gpu_mem
+            meta["num_workers"] = num_workers
+            with open(meta_path, "w", encoding="utf-8") as f:
+                json.dump(meta, f, indent=2)
+
     if cfg.training.get("overfit_batch", False):
         steps = int(cfg.training.get("overfit_steps", 300))
         overfit_epoch = cfg.training.get("overfit_epoch", None)
         if overfit_epoch is not None:
             overfit_epoch = int(overfit_epoch)
         trainer.fit_overfit_batch(num_steps=steps, epoch=overfit_epoch)
+        update_run_meta()
         return 0
 
     eval_interval = int(cfg.training.get("eval_interval", 1))
     trainer.fit(num_epochs=num_epochs, start_epoch=start_epoch, eval_interval=eval_interval)
+    update_run_meta()
     return 0
 
 

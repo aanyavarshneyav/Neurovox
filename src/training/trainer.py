@@ -147,6 +147,12 @@ class Trainer:
         batch_size = getattr(batch_sampler, "batch_size", getattr(self.train_loader, "batch_size", 0))
         num_speakers = getattr(batch_sampler, "num_speakers", 0)
 
+        peak_gpu_mem = (
+            int(torch.cuda.max_memory_allocated(self.device))
+            if torch.cuda.is_available() and self.device.type == "cuda"
+            else (int(torch.cuda.max_memory_allocated()) if torch.cuda.is_available() else 0)
+        )
+
         lr_info: Dict[str, Any] = {
             "type": type(self.scheduler).__name__ if self.scheduler is not None else "constant",
         }
@@ -175,6 +181,7 @@ class Trainer:
             "parameter_count": param_count,
             "trainable_parameter_count": trainable_param_count,
             "num_workers": getattr(self.train_loader, "num_workers", 0),
+            "peak_gpu_memory_bytes": peak_gpu_mem,
             "batch_size": batch_size,
             "batches_per_epoch": len(self.train_loader) if hasattr(self.train_loader, "__len__") else 0,
             "grad_clip": self.grad_clip,
@@ -203,6 +210,8 @@ class Trainer:
         self.loss_fn.train()
         if hasattr(self.loss_fn, "set_epoch"):
             self.loss_fn.set_epoch(epoch)
+        if hasattr(self.loss_fn, "reset_epoch_diagnostics"):
+            self.loss_fn.reset_epoch_diagnostics()
 
         # Update batch_sampler epoch
         batch_sampler = getattr(self.train_loader, "batch_sampler", None)
@@ -215,9 +224,17 @@ class Trainer:
         total_samples_tensor = torch.zeros(1, device=self.device, dtype=torch.long)
         grad_norms_sum_tensor = torch.zeros(1, device=self.device, dtype=torch.float32)
 
+        data_loading_sec = 0.0
+        forward_backward_optimizer_sec = 0.0
+
         t0_train = time.perf_counter()
+        t_prev = time.perf_counter()
 
         for batch_idx, batch_data in enumerate(self.train_loader, start=1):
+            t_data_ready = time.perf_counter()
+            data_loading_sec += (t_data_ready - t_prev)
+
+            t0_step = time.perf_counter()
             if isinstance(batch_data, dict):
                 data = batch_data.get("features", batch_data.get("waveform"))
                 labels = batch_data["label"]
@@ -301,6 +318,9 @@ class Trainer:
             ):
                 self.scheduler.step()
 
+            forward_backward_optimizer_sec += (time.perf_counter() - t0_step)
+            t_prev = time.perf_counter()
+
         train_sec = time.perf_counter() - t0_train
 
         # Synchronize accumulated loss, accuracy, and gradient norm once per epoch
@@ -326,8 +346,11 @@ class Trainer:
 
         epoch_metrics = {
             "train_loss": avg_loss,
+            "train_loss_unrounded": avg_loss,
             "train_acc": round(train_acc, 2),
             "train_sec": round(train_sec, 2),
+            "data_loading_sec": round(data_loading_sec, 2),
+            "forward_backward_optimizer_sec": round(forward_backward_optimizer_sec, 2),
             "grad_norm": round(avg_grad_norm, 4),
             "lr": current_lr,
             "sampler_epoch": epoch,
@@ -551,7 +574,15 @@ class Trainer:
                 )
 
         for epoch in range(start_epoch, num_epochs + 1):
+            t0_epoch = time.perf_counter()
             train_metrics = self.train_epoch(epoch)
+
+            peak_gpu_mem = (
+                int(torch.cuda.max_memory_allocated(self.device))
+                if torch.cuda.is_available() and self.device.type == "cuda"
+                else (int(torch.cuda.max_memory_allocated()) if torch.cuda.is_available() else 0)
+            )
+            num_workers = getattr(self.train_loader, "num_workers", 0)
 
             record: Dict[str, Any] = {
                 "epoch": epoch,
@@ -563,12 +594,17 @@ class Trainer:
                 "train_loss_unrounded": train_metrics["train_loss"],
                 "train_acc": train_metrics["train_acc"],
                 "train_sec": train_metrics["train_sec"],
+                "data_loading_sec": train_metrics["data_loading_sec"],
+                "forward_backward_optimizer_sec": train_metrics["forward_backward_optimizer_sec"],
                 "lr": train_metrics["lr"],
                 "grad_norm": train_metrics["grad_norm"],
                 "eval_sec": 0.0,
+                "dev_clean_eval_sec": 0.0,
                 "dev_eer_pct": None,
                 "dev_mindcf_05": None,
                 "train_probe_eer_pct": None,
+                "peak_gpu_memory_bytes": peak_gpu_mem,
+                "num_workers": num_workers,
             }
 
             # Forward loss diagnostics (e.g. AdaptiveDrop) into epoch history record
@@ -581,6 +617,7 @@ class Trainer:
                 dev_eer, dev_mindcf, dev_eval_sec = self.evaluate_trials(self.dev_trials_path)
                 record["dev_eer_pct"] = round(dev_eer, 2)
                 record["dev_mindcf_05"] = round(dev_mindcf, 4)
+                record["dev_clean_eval_sec"] = round(dev_eval_sec, 2)
                 record["eval_sec"] = round(dev_eval_sec, 2)
 
                 # Train-probe evaluation (training-data EER)
@@ -588,6 +625,9 @@ class Trainer:
                     probe_eer, _, probe_sec = self.evaluate_trials(self.train_probe_trials_path)
                     record["train_probe_eer_pct"] = round(probe_eer, 2)
                     record["eval_sec"] = round(record["eval_sec"] + probe_sec, 2)
+
+            total_sec = time.perf_counter() - t0_epoch
+            record["total_sec"] = round(total_sec, 2)
 
             # Append current record BEFORE saving best_dev_eer.pt (F10)
             self.history.append(record)
@@ -635,6 +675,7 @@ class Trainer:
 
         # Final checkpoint
         self.save_checkpoint(self.ckpt_dir / "final.pt", num_epochs)
+        self._write_run_meta()
 
         print("=" * 95)
         print(f"TRAINING COMPLETE: {self.run_id} | Best Dev EER: {self.best_dev_eer:.2f}%")

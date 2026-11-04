@@ -31,6 +31,8 @@
 | `sanity_2c_smoke_ecapa` | 2026-11-04 | `da0e129c` | 42 | `ecapa_tdnn` (param-matched) | AAMSoftmax ($s=30, m=0.2$) | 1 fixed batch (64 spk) | 4,123,210 (4.123M) | N/A (overfit) | N/A | N/A | Mac M3 Pro (`device = mps`, fp32) | COMPLETED [GATE PASSED] | Phase 2C integration smoke test: Parameter-matched ECAPA-TDNN (C=400, MFA=1200). Train acc: 100.0%, Loss: 13.7640 -> 0.000010 (1,427,926x reduction), 0 NaNs. 100 steps. |
 | `sanity_2c_active_s0` | 2026-11-04 | `c481dd0f` | 42 | `ska_hnn` (S0) | IAAMSoftmax ($s=30, m=0.2, \tau=0.423, \tau_{corr}=0.5, \text{ESC}=5, \text{ESD}=5$, epoch=6) | 1 fixed batch (64 spk) | 4,167,700 (4.168M) | N/A (diagnostic) | N/A | N/A | Mac M3 Pro (`device = mps`, fp32) | COMPLETED [GATE PASSED] | Phase 2C.1 active AdaptiveDrop diagnostic: S0 at explicit epoch 6 (>= max(ESC, ESD)). Step 1: Loss 11.9358, Retained 32/64, Corrected 0, Filtered 32, GuardActive=True. Step 100: Loss 0.000012 (1,006,921.3x reduction), Retained acc 100.0% (all 50.0%), Retained 32/64, Corrected 0, Filtered 32, GuardActive=False. 0 NaNs. |
 
+- **2026-11-04 Diagnostics & Timing Instrumentation:** Fixed epoch-1 loss diagnostic accumulation by resetting counters at `train_epoch` start and guarding `IAAMSoftmax.forward` eval mode; added per-epoch timing (`data_loading_sec`, `forward_backward_optimizer_sec`, `dev_clean_eval_sec`, `total_sec`), peak GPU memory, and dataloader worker tracking to `history.csv` / `run_meta.json` (pilot runs remain valid and unaffected).
+
 ---
 
 ## 2. Experimental Entries
