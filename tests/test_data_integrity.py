@@ -14,7 +14,7 @@ import json
 import pytest
 import soundfile as sf
 
-from src.utils.paths import PROJECT_ROOT, get_data_root
+from src.utils.paths import PROJECT_ROOT, get_data_root, resolve_path
 from src.data.prep_librispeech import (
     parse_speakers_txt,
     prepare_librispeech,
@@ -112,8 +112,7 @@ def test_manifest_files_exist_and_durations_match():
         # Check a sample of rows (first 20 and last 20) for fast verification
         sample_rows = rows[:20] + rows[-20:] if len(rows) > 40 else rows
         for r in sample_rows:
-            rel_path = Path(r["path"])
-            abs_path = (PROJECT_ROOT / rel_path) if not rel_path.is_absolute() else rel_path
+            abs_path = resolve_path(r["path"])
             assert abs_path.exists(), f"File listed in manifest does not exist: {abs_path}"
 
             # Verify duration within 0.01s tolerance

@@ -1,0 +1,2 @@
+epoch,sampler_epoch,first_batch_index_hash,unique_utts_this_epoch,cum_unique_utts,train_loss,train_loss_unrounded,train_acc,train_sec,data_loading_sec,forward_backward_optimizer_sec,lr,grad_norm,eval_sec,dev_clean_eval_sec,dev_eer_pct,dev_mindcf_05,train_probe_eer_pct,peak_gpu_memory_bytes,num_workers,total_sec
+1,1,f42093f27df7f2c9,17884,17884,9.9911,9.991128827424328,19.48,228.76,1.19,227.56,0.001,20.6335,46.3,46.3,22.0,0.7977,,0,2,275.1

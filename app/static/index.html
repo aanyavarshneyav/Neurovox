@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Neurovox — Speaker Verification</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header class="topbar" id="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+        <polygon points="12,2 21,7 21,17 12,22 3,17 3,7" fill="rgba(34,211,238,0.14)" stroke="#22d3ee" stroke-width="1.6" />
+        <path d="M7 12h2l1.6-4 2.8 8 1.6-4H17" fill="none" stroke="#38bdf8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+      <span class="brand-name">NEUROVOX</span>
+    </div>
+
+    <div class="tabs" role="tablist" aria-label="Site sections">
+      <button type="button" role="tab" id="tab-demo" data-tab="demo" aria-controls="panel-demo" aria-selected="true">Demo</button>
+      <button type="button" role="tab" id="tab-how" data-tab="how" aria-controls="panel-how" aria-selected="false" tabindex="-1">How it works</button>
+      <button type="button" role="tab" id="tab-results" data-tab="results" aria-controls="panel-results" aria-selected="false" tabindex="-1">Results</button>
+      <button type="button" role="tab" id="tab-models" data-tab="models" aria-controls="panel-models" aria-selected="false" tabindex="-1">Models</button>
+      <button type="button" role="tab" id="tab-rigor" data-tab="rigor" aria-controls="panel-rigor" aria-selected="false" tabindex="-1">Rigor</button>
+    </div>
+
+    <div class="nav-telemetry" aria-label="System telemetry">
+      <span class="nav-chip" id="nav-chip-dataset">
+        <span class="nav-dot" aria-hidden="true"></span>
+        <span class="nav-k">DATASET:</span>
+        <span class="nav-v" id="nav-val-dataset">LibriSpeech</span>
+      </span>
+      <span class="nav-chip">
+        <span class="nav-dot" aria-hidden="true"></span>
+        <span class="nav-k">MODEL:</span>
+        <span class="nav-v">SKA-HNN + IAAMSoftmax</span>
+      </span>
+      <span class="nav-chip" id="nav-chip-ckpt">
+        <span class="nav-dot nav-dot-live" aria-hidden="true"></span>
+        <span class="nav-k">DEMO CHECKPOINT:</span>
+        <span class="nav-v" id="nav-val-ckpt">loading…</span>
+      </span>
+    </div>
+
+    <button type="button" class="btn btn-nav-about" id="about-btn">About this project</button>
+  </header>
+
+  <main id="main">
+    <!-- ================= 1. DEMO ================= -->
+    <section role="tabpanel" id="panel-demo" aria-labelledby="tab-demo" tabindex="0" class="tabpanel">
+      <div class="demo-top">
+        <div class="hero-block">
+          <div class="hero-title-row">
+            <h1><span class="term" tabindex="0" data-term="SKA">SKA</span>-HNN + <span class="term" tabindex="0" data-term="IAAMSoftmax">IAAMSoftmax</span> (<span class="term" tabindex="0" data-term="AdaptiveDrop">AdaptiveDrop</span>)</h1>
+            <span class="hero-sub">on LibriSpeech</span>
+            <span class="chip" id="data-chip" hidden></span>
+          </div>
+          <p class="hero-lead">Record or upload two short voice clips. The model turns each into a <span class="term" tabindex="0" data-term="embedding">voiceprint (embedding)</span> and says whether they sound like the same person.</p>
+          <p class="model-line" id="model-line">Model used by this demo: loading…</p>
+        </div>
+
+        <div class="demo-bar-actions">
+          <div class="examples">
+            <span class="micro-label">TEST-CLEAN EXAMPLES</span>
+            <div class="examples-btns">
+              <button type="button" class="btn" id="example-same-btn">Run example: same speaker</button>
+              <button type="button" class="btn" id="example-diff-btn">Run example: different speakers</button>
+            </div>
+          </div>
+          <button type="button" class="btn primary big" id="verify-btn" disabled>Verify speakers</button>
+        </div>
+      </div>
+
+      <div id="mic-alert" class="alert" role="status"></div>
+      <div id="error-alert" class="alert" role="alert"></div>
+
+      <!-- Three-pane mission-control layout -->
+      <div class="demo-three-pane">
+        <!-- LEFT PANE: Enrollment & Test Clip Controls -->
+        <div class="pane-clips">
+          <article class="card corner-card clip" id="card-enroll" aria-label="Enrollment clip">
+            <header class="clip-head">
+              <div>
+                <span class="micro-label">INPUT CHANNEL 01 · KNOWN VOICE</span>
+                <h2>1 · Enrollment clip</h2>
+              </div>
+              <button type="button" class="btn rec" id="enroll-rec-btn">
+                <span class="rec-dot" aria-hidden="true"></span>
+                <span class="rec-label">Record (up to 10 s)</span>
+              </button>
+            </header>
+            <div class="meter-box">
+              <div class="meter-head"><span id="enroll-timer">Idle (max 10 s, min 1 s)</span><span id="enroll-level-text">Level 0%</span></div>
+              <div class="meter-track" role="presentation"><div class="meter-fill" id="enroll-meter"></div></div>
+            </div>
+            <div class="clip-io-row">
+              <label class="upload">Or upload an audio file (wav, webm, ogg, flac, mp3, m4a)
+                <input type="file" id="enroll-file" accept="audio/*,.flac,.wav,.webm,.ogg,.mp3,.m4a" />
+              </label>
+              <div class="clip-status" id="enroll-status">No enrollment clip loaded.</div>
+            </div>
+            <audio id="enroll-audio" controls></audio>
+          </article>
+
+          <article class="card corner-card clip" id="card-test" aria-label="Test clip">
+            <header class="clip-head">
+              <div>
+                <span class="micro-label">INPUT CHANNEL 02 · VOICE TO CHECK</span>
+                <h2>2 · Test clip</h2>
+              </div>
+              <button type="button" class="btn rec" id="test-rec-btn">
+                <span class="rec-dot" aria-hidden="true"></span>
+                <span class="rec-label">Record (up to 10 s)</span>
+              </button>
+            </header>
+            <div class="meter-box">
+              <div class="meter-head"><span id="test-timer">Idle (max 10 s, min 1 s)</span><span id="test-level-text">Level 0%</span></div>
+              <div class="meter-track" role="presentation"><div class="meter-fill" id="test-meter"></div></div>
+            </div>
+            <div class="clip-io-row">
+              <label class="upload">Or upload an audio file (wav, webm, ogg, flac, mp3, m4a)
+                <input type="file" id="test-file" accept="audio/*,.flac,.wav,.webm,.ogg,.mp3,.m4a" />
+              </label>
+              <div class="clip-status" id="test-status">No test clip loaded.</div>
+            </div>
+            <audio id="test-audio" controls></audio>
+          </article>
+        </div>
+
+        <!-- CENTER PANE: Score Gauge & Verdict Reveal on Glowing Backdrop -->
+        <article class="card corner-card pane-gauge" id="result-card" aria-label="Verification gauge and verdict" aria-live="polite">
+          <div class="pane-head-row">
+            <div>
+              <span class="micro-label">BIOMETRIC DECISION ENGINE</span>
+              <h2>Similarity Gauge &amp; Verdict</h2>
+            </div>
+            <span class="tag tag-measured">measured</span>
+          </div>
+          <div class="gauge-stage">
+            <div class="gauge-wrap" id="gauge-wrap"></div>
+            <div class="gauge-legend" id="gauge-legend"></div>
+            <div class="verdict idle" id="verdict">Waiting for two clips</div>
+          </div>
+          <div class="analyzing" id="analyzing" hidden>
+            <span class="spinner" aria-hidden="true"></span>
+            <span>Analyzing…</span>
+          </div>
+        </article>
+
+        <!-- RIGHT PANE: Telemetry Cards -->
+        <aside class="pane-telemetry" aria-label="Verification telemetry readouts">
+          <div class="telemetry-grid">
+            <div class="card telem-tile">
+              <span class="micro-label"><span class="term" tabindex="0" data-term="cosine score">COSINE SCORE</span></span>
+              <span class="telem-val accent" id="res-score">—</span>
+              <span class="telem-sub">range [-1.0000, +1.0000]</span>
+            </div>
+            <div class="card telem-tile">
+              <span class="micro-label"><span class="term" tabindex="0" data-term="threshold">DECISION THRESHOLD</span></span>
+              <span class="telem-val" id="res-threshold">—</span>
+              <span class="telem-sub">dev-clean EER operating point</span>
+            </div>
+            <div class="card telem-tile wide">
+              <span class="micro-label"><span class="term" tabindex="0" data-term="borderline zone">BORDERLINE ZONE</span></span>
+              <span class="telem-val warn-txt" id="res-borderline">—</span>
+              <span class="telem-sub">scores inside this band return INCONCLUSIVE</span>
+            </div>
+            <div class="card telem-tile">
+              <span class="micro-label">ENROLLMENT LENGTH</span>
+              <span class="telem-val" id="res-enroll-dur">—</span>
+              <span class="telem-sub">16 kHz mono full-utterance</span>
+            </div>
+            <div class="card telem-tile">
+              <span class="micro-label">TEST LENGTH</span>
+              <span class="telem-val" id="res-test-dur">—</span>
+              <span class="telem-sub">16 kHz mono full-utterance</span>
+            </div>
+            <div class="card telem-tile">
+              <span class="micro-label">CHECKPOINT &amp; EPOCH</span>
+              <span class="telem-val small-mono" id="res-ckpt-epoch">—</span>
+              <span class="telem-sub">active model weights</span>
+            </div>
+            <div class="card telem-tile">
+              <span class="micro-label">DEV-CLEAN <span class="term" tabindex="0" data-term="EER">EER</span></span>
+              <span class="telem-val pos-txt" id="res-dev-eer">—</span>
+              <span class="telem-sub">6,200 cross-chapter trials</span>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ================= 2. HOW IT WORKS ================= -->
+    <section role="tabpanel" id="panel-how" aria-labelledby="tab-how" tabindex="0" class="tabpanel" hidden>
+      <div class="panel-head">
+        <div>
+          <span class="micro-label">ARCHITECTURE PIPELINE · 5 STAGES</span>
+          <h2>How it works</h2>
+          <p>Five stages turn a speech recording into a decision about who is speaking. Click any stage for the technical details.</p>
+        </div>
+      </div>
+      <div class="how-center">
+        <div class="pipeline" id="pipeline"><p class="muted">Loading…</p></div>
+        <div class="card corner-card flow-strip" id="flow-strip" aria-label="One clip in, one decision out summary"></div>
+      </div>
+    </section>
+
+    <!-- ================= 3. RESULTS ================= -->
+    <section role="tabpanel" id="panel-results" aria-labelledby="tab-results" tabindex="0" class="tabpanel" hidden>
+      <div class="panel-head">
+        <div>
+          <span class="micro-label">TRAINING &amp; EVALUATION TELEMETRY</span>
+          <h2>Results</h2>
+          <p>Measured on the <span class="term" tabindex="0" data-term="dev-clean">dev-clean</span> set during training. Lower <span class="term" tabindex="0" data-term="EER">EER</span> is better.</p>
+        </div>
+        <div class="panel-actions">
+          <button type="button" class="btn" id="btn-view-data">View data</button>
+          <button type="button" class="btn" id="btn-view-timing">Training time</button>
+        </div>
+      </div>
+      <div class="stat-row" id="stat-row"></div>
+      <div class="chart-grid" id="chart-grid"><p class="muted">Loading…</p></div>
+    </section>
+
+    <!-- ================= 4. MODELS ================= -->
+    <section role="tabpanel" id="panel-models" aria-labelledby="tab-models" tabindex="0" class="tabpanel" hidden>
+      <div class="panel-head">
+        <div>
+          <span class="micro-label">ABLATION GRID &amp; PARAMETER AUDIT</span>
+          <h2>Models</h2>
+          <p>The SKA-HNN variants (S0–S6) differ in one switch each, plus the ECAPA-TDNN baselines. Parameter counts are measured with torchinfo.</p>
+        </div>
+      </div>
+      <div class="split" id="models-split"><p class="muted">Loading…</p></div>
+    </section>
+
+    <!-- ================= 5. RIGOR ================= -->
+    <section role="tabpanel" id="panel-rigor" aria-labelledby="tab-rigor" tabindex="0" class="tabpanel" hidden>
+      <div class="panel-head">
+        <div>
+          <span class="micro-label">VERIFICATION &amp; EVALUATION PROTOCOL</span>
+          <h2>Rigor</h2>
+          <p>How the numbers on this site were produced.</p>
+        </div>
+      </div>
+      <div class="rigor-grid" id="rigor-grid"><p class="muted">Loading…</p></div>
+    </section>
+  </main>
+
+  <!-- Modal overlay (focus trap, Esc closes) -->
+  <div class="overlay" id="overlay" hidden>
+    <div class="modal corner-card" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" tabindex="-1">
+      <div class="modal-head">
+        <div>
+          <span class="micro-label" id="modal-eyebrow">TELEMETRY INSPECTOR</span>
+          <h2 id="modal-title">Details</h2>
+        </div>
+        <button type="button" class="btn primary modal-close-btn" id="modal-close" aria-label="Close dialog">Close ✕</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+      <div class="modal-foot">
+        <span class="mono">ESC TO CLOSE · TAB FOCUS TRAPPED · OFFLINE LOCAL TELEMETRY</span>
+        <span class="tag tag-measured">measured</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="tooltip" role="tooltip" hidden></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

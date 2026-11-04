@@ -22,7 +22,7 @@ def main() -> int:
         sys.executable,
         str(REPO_ROOT / "src/data/trial_generator.py"),
         "--manifest", str(manifest),
-        "--targets-per-speaker", "14",
+        "--targets-per-speaker", "20",
         "--seed", "42",
         "--out-dir", str(out_dir),
     ])

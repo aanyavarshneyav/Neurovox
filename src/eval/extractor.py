@@ -135,7 +135,9 @@ class EmbeddingExtractor:
 
         return results
 
-    def extract_for_trial_file(self, trial_file_path: Union[str, Path]) -> Dict[str, np.ndarray]:
+    def extract_for_trial_file(
+        self, trial_file_path: Union[str, Path], show_progress: bool = False
+    ) -> Dict[str, np.ndarray]:
         """Parse trial file, extract unique utterances, and return path -> embedding map."""
         trial_path = resolve_path(trial_file_path)
         if not trial_path.exists():
@@ -149,8 +151,16 @@ class EmbeddingExtractor:
                     unique_paths.add(parts[1])
                     unique_paths.add(parts[2])
 
+        path_iterable = unique_paths
+        if show_progress:
+            try:
+                from tqdm import tqdm
+                path_iterable = tqdm(unique_paths, desc="Extracting embeddings")
+            except ImportError:
+                pass
+
         cache: Dict[str, np.ndarray] = {}
-        for path_str in unique_paths:
+        for path_str in path_iterable:
             emb = self.extract_from_file(path_str)
             cache[path_str] = emb
 

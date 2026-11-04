@@ -320,13 +320,14 @@ class IAAMSoftmax(AAMSoftmax):
         self.last_keep_mask = keep_mask.detach()
 
         # Update epoch accumulators
-        self._epoch_total_samples += B
-        self._epoch_retained_samples += num_kept
-        self._epoch_filtered_samples += num_filtered
-        self._epoch_corrected_samples += num_corrected
-        if guard_activated:
-            self._epoch_guard_activations += 1
-        self._epoch_batches += 1
+        if self.training:
+            self._epoch_total_samples += B
+            self._epoch_retained_samples += num_kept
+            self._epoch_filtered_samples += num_filtered
+            self._epoch_corrected_samples += num_corrected
+            if guard_activated:
+                self._epoch_guard_activations += 1
+            self._epoch_batches += 1
 
         return (loss, diag) if return_diagnostics else loss
 

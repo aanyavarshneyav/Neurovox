@@ -12,6 +12,8 @@ Supports:
 
 import argparse
 import hashlib
+import json
+import os
 from pathlib import Path
 import random
 import shutil
@@ -117,6 +119,12 @@ def main() -> int:
         default=None,
         help="Override number of training epochs",
     )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Override random seed (defaults to config or 42)",
+    )
     args = parser.parse_args()
 
     config_path = resolve_path(args.config)
@@ -129,7 +137,7 @@ def main() -> int:
 
     run_id = args.run_id if args.run_id else config_path.stem
     num_epochs = args.epochs if args.epochs is not None else int(cfg.training.get("epochs", 1))
-    seed = int(cfg.training.get("seed", 42))
+    seed = args.seed if args.seed is not None else int(cfg.training.get("seed", 42))
 
     # Directories
     ckpt_dir = get_ckpt_root() / run_id
@@ -199,6 +207,8 @@ def main() -> int:
     print(f"Seed:           {seed}")
     print(f"Augmentations:  speed={enable_speed} (p={speed_prob}), noise={enable_noise} (p={noise_prob}), babble={enable_babble} (p={babble_prob}), rir={enable_rir} (p={rir_prob}), specaug={enable_specaug} (p={specaug_p})")
     print(f"Epochs:         {num_epochs} | Batch Size: {batch_size}")
+    if not enable_rir:
+        print("[AUGMENTATION]  RIR augmentation explicitly OFF (Mac platform, no valid RIR download)")
     print("=" * 80)
 
     dataset = LibriSpeechDataset(
@@ -390,16 +400,41 @@ def main() -> int:
         else:
             print(f"No previous checkpoint found in {ckpt_dir}. Starting from scratch.")
 
+    def update_run_meta() -> None:
+        peak_gpu_mem = (
+            int(torch.cuda.max_memory_allocated(device))
+            if torch.cuda.is_available() and device.type == "cuda"
+            else (int(torch.cuda.max_memory_allocated()) if torch.cuda.is_available() else 0)
+        )
+        from src.training.trainer import get_git_info
+        git_sha, git_dirty = get_git_info()
+        meta_path = results_dir / "run_meta.json"
+        if meta_path.exists():
+            with open(meta_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+            meta["peak_gpu_memory_bytes"] = peak_gpu_mem
+            meta["num_workers"] = num_workers
+            meta["PYTORCH_ENABLE_MPS_FALLBACK"] = os.environ.get("PYTORCH_ENABLE_MPS_FALLBACK", "0")
+            meta["device"] = str(device)
+            meta["precision"] = args.precision
+            meta["git_dirty"] = git_dirty
+            meta["git_sha"] = git_sha
+            meta["seed"] = seed
+            with open(meta_path, "w", encoding="utf-8") as f:
+                json.dump(meta, f, indent=2)
+
     if cfg.training.get("overfit_batch", False):
         steps = int(cfg.training.get("overfit_steps", 300))
         overfit_epoch = cfg.training.get("overfit_epoch", None)
         if overfit_epoch is not None:
             overfit_epoch = int(overfit_epoch)
         trainer.fit_overfit_batch(num_steps=steps, epoch=overfit_epoch)
+        update_run_meta()
         return 0
 
     eval_interval = int(cfg.training.get("eval_interval", 1))
     trainer.fit(num_epochs=num_epochs, start_epoch=start_epoch, eval_interval=eval_interval)
+    update_run_meta()
     return 0
 
 

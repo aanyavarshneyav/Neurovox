@@ -1,0 +1,9 @@
+{
+  "checkpoint_path": "/Users/aanyavarshney/Documents/GitHub/Neurovox/demo_ckpt/best_dev_eer.pt",
+  "epoch": 16,
+  "dev_eer": 12.94,
+  "computed_dev_eer_pct": 12.94,
+  "threshold": 0.5676,
+  "eer_threshold": 0.5676,
+  "trials_path": "/Users/aanyavarshney/Documents/GitHub/Neurovox/data/trials/trials_dev-clean.txt"
+}

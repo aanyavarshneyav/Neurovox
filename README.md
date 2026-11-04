@@ -46,7 +46,7 @@ pip install --upgrade pip setuptools wheel
 # 4. Install dependencies in editable mode
 pip install -e ".[dev,demo]"
 
-# 5. Verify installation with test suite
+# 5. Verify installation with test suite (and start local demo: python app/server.py --checkpoint checkpoints/s0_seed42/best_dev_eer.pt)
 pytest -v
 ```
 

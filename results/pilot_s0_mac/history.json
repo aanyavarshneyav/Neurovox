@@ -1,0 +1,32 @@
+[
+  {
+    "epoch": 1,
+    "sampler_epoch": 1,
+    "first_batch_index_hash": "f42093f27df7f2c9",
+    "unique_utts_this_epoch": 17884,
+    "cum_unique_utts": 17884,
+    "train_loss": 9.9911,
+    "train_loss_unrounded": 9.991128827424328,
+    "train_acc": 19.48,
+    "train_sec": 258.99,
+    "data_loading_sec": 1.78,
+    "forward_backward_optimizer_sec": 257.21,
+    "lr": 0.001,
+    "grad_norm": 20.6335,
+    "eval_sec": 48.19,
+    "dev_clean_eval_sec": 48.19,
+    "dev_eer_pct": 22.0,
+    "dev_mindcf_05": 0.7977,
+    "train_probe_eer_pct": null,
+    "peak_gpu_memory_bytes": 0,
+    "num_workers": 2,
+    "loss_num_corrected": 0,
+    "loss_num_filtered": 0,
+    "loss_num_retained": 28544,
+    "loss_total_samples": 28544,
+    "loss_keep_ratio": 1.0,
+    "loss_guard_activations": 0,
+    "loss_batches": 446,
+    "total_sec": 307.23
+  }
+]
