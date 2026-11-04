@@ -296,6 +296,31 @@ This document records the architectural, methodological, and experimental design
   6. **Empirical Compute Budget Formulation:** Compute budgets for headline experiments (S0 vs S1 across seeds 42, 123, 777) are calculated directly from empirical epoch times measured in the pilot, rather than historical MacBook estimates `[Engineering Choice]`.
 - **Consequences:** Eliminates silent reproducibility failure modes, establishes an automated audit trail before multi-epoch training, guarantees safe checkpoint persistence across Colab runtime drops, and provides accurate GPU compute unit forecasting.
 
+---
+
+## ADR-022: Python 3.13 Runtime Compatibility, PEP 508 NumPy Version Constraints, and Colab Preflight Hardening (Phase 3A.1)
+- **Date:** 2026-11-04
+- **Status:** Accepted
+- **Context:**
+  1. Google Colab updated its default runtime environment to Python 3.13.18, with pre-installed NumPy 2.1.3 and PyTorch 2.11.0 (CUDA 12.x on NVIDIA T4 GPU).
+  2. Previously, project dependency manifests (`pyproject.toml`, `requirements.txt`, `requirements-colab.txt`) enforced `numpy>=1.26.0,<2.0.0`. When pip resolved dependencies in Colab, it downgraded NumPy to 1.26.4. Because NumPy 1.26.4 does not support Python 3.13 and is binary-incompatible with libraries compiled against the NumPy 2.x C-ABI, the runtime crashed with `ValueError: numpy.dtype size changed, may indicate binary incompatibility.`
+  3. An architectural audit was required to evaluate NumPy 2.1.3 compatibility across the Neurovox codebase (audio extraction, feature pipelines, metrics, transforms, and model architectures) and scientific dependencies (`scipy`, `pandas`, `librosa`, `soundfile`, `scikit-learn`, `torchaudio`).
+- **Decision:**
+  1. **PEP 508 Python-Version-Aware NumPy Constraints:** Replace static `<2.0.0` bounds with version-conditional environment markers:
+     - Python >= 3.13: `numpy>=2.1.3,<2.2` `[Engineering Choice]`
+     - Python < 3.13: `numpy>=1.26.0,<2.0` `[Engineering Choice]`
+     Configured across `pyproject.toml`, `requirements.txt`, and `requirements-colab.txt`.
+  2. **Zero Code Incompatibilities with NumPy 2.1.3:** Complete symbol audit of all 56 distinct `np.*` symbols confirmed zero deprecated or removed aliases (`np.float_`, `np.int_`, `np.bool_`, `np.complex_`, etc.) and zero removed functions (`np.alltrue`, `np.product`, `np.trapz`). Empirical test suite execution (114 tests) under an isolated NumPy 2.1.3 / SciPy 1.18.1 / pandas 3.1.0 / librosa 1.0.0 / soundfile 0.14.0 / sklearn 1.9.1 / PyTorch 2.15.0 environment passed with 100% success (0 errors, 0 failures).
+  3. **Colab Preflight Hardening (Section 5):**
+     - Audit pre-existing Python, NumPy, and PyTorch versions prior to running pip.
+     - Execute pip installation with `sys.executable -m pip` to target the exact kernel environment.
+     - Install package in editable mode with `--no-deps` to eliminate duplicate dependency re-resolution.
+     - Verify explicit imports of all core libraries (raising `ImportError` on any failure).
+     - Run `pip check` to verify no broken core dependency requirements.
+     - Assert CUDA availability and report GPU model, VRAM, and driver details before permitting pilot execution.
+- **Consequences:** Restores full Google Colab execution on Python 3.13 without downgrading pre-installed NumPy or breaking binary compatibility, while preserving 100% backward compatibility for local development on Python 3.12 with NumPy 1.26.
+
+
 
 
 
