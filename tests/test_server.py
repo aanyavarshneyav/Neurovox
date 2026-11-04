@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 import numpy as np
 import soundfile as sf
 
-from app.server import STATE, app
+from app.server import STATE, app, classify_verdict
 
 
 def _make_wav_bytes(duration_sec: float = 1.5, sr: int = 16000, seed: int = 0) -> bytes:
@@ -30,6 +30,7 @@ def test_server_loads_checkpoint_and_verifies_two_short_clips():
         assert info["checkpoint_path"]
         assert info["checkpoint_epoch"] >= 1
         assert -1.0 <= float(info["threshold"]) <= 1.0
+        assert info["borderline_zone"] == "threshold +/- 0.10"
 
         wav_enroll = _make_wav_bytes(duration_sec=1.5, seed=42)
         wav_test = _make_wav_bytes(duration_sec=1.5, seed=99)
@@ -46,9 +47,16 @@ def test_server_loads_checkpoint_and_verifies_two_short_clips():
 
         score = float(data["score"])
         assert -1.0 <= score <= 1.0
-        assert data["verdict"] in {"SAME", "DIFFERENT"}
+        assert data["verdict"] in {"SAME", "DIFFERENT", "INCONCLUSIVE"}
+        assert data["borderline_zone"] == "threshold +/- 0.10"
         assert float(data["enrollment_duration"]) >= 1.0
         assert float(data["test_duration"]) >= 1.0
+
+        # Check verdict band helper directly
+        assert classify_verdict(0.75, 0.50, 0.10) == "SAME"
+        assert classify_verdict(0.55, 0.50, 0.10) == "INCONCLUSIVE"
+        assert classify_verdict(0.45, 0.50, 0.10) == "INCONCLUSIVE"
+        assert classify_verdict(0.35, 0.50, 0.10) == "DIFFERENT"
 
         # Clips shorter than 1.0s must be rejected with a clear JSON error
         short_wav = _make_wav_bytes(duration_sec=0.4, seed=7)
@@ -61,4 +69,16 @@ def test_server_loads_checkpoint_and_verifies_two_short_clips():
         )
         assert short_resp.status_code == 400
         assert "too short" in short_resp.json().get("error", "").lower()
+
+        # Check Stage 2 /api/results endpoint
+        results_resp = client.get("/api/results")
+        assert results_resp.status_code == 200
+        res_data = results_resp.json()
+        assert res_data["runs"]["s0"] is not None
+        assert len(res_data["runs"]["s0"]["epochs"]) >= 1
+        assert len(res_data["architecture"]["clickable_modules"]) >= 9
+        assert len(res_data["architecture"]["ablation_switches"]) == 7
+        assert len(res_data["tiers"]) == 5
+        assert "found" in res_data["sources"]
+        assert "missing" in res_data["sources"]
 
