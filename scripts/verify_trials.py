@@ -28,8 +28,8 @@ COMMITTED_V2_CHECKSUMS: dict[str, str] = {
     "trials_test-clean_meta.csv": "2b7ea81443af82a272e7bf0eff5a5e57ebf38e372f07efa421cc8415ef75d2bf",
     "trials_test-other_meta.csv": "7284487deb0ecea8b50cf090802222b8e789ae7287b0a68ab2eb1e44b466e0a4",
     "trials_dev-clean_meta.csv": "f11c9755fb4f2a464f79a6c0fec6a8e8597b832e2a93262a750b07a355271cc1",
-    "trials_train-probe.txt": "381b6f38c398d487a141305a9c3d10937364d85016f3d07db97cacb85840d8c2",
-    "trials_train-probe_meta.csv": "a4c44572c5c4f576e5673d2fab444d5f587c93979d8840097dfe4c543c204c17",
+    "trials_train-probe.txt": "923d22e5533ecb442787295901ea98dc301948a550ae4cd1440c57da53aa8b7f",
+    "trials_train-probe_meta.csv": "cc56e15c96852f601ecb8fd1aa1d6d04329a3d4b770440ef246c562d96af20f8",
 }
 
 # Cryptographically committed manifest checksums

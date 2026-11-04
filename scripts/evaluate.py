@@ -130,20 +130,24 @@ def evaluate_trials(
     if trials_meta_path is not None and trials_meta_path.exists():
         df_meta = pd.read_csv(trials_meta_path)
         boot_res = speaker_bootstrap_ci(
-            scores=scores_arr,
+            scores_a=scores_arr,
             labels=labels_arr,
-            trials_meta=df_meta,
-            num_bootstraps=bootstrap_iterations,
-            p_targets=[0.05, 0.01],
+            spk_a=df_meta["spk_a"].values,
+            spk_b=df_meta["spk_b"].values,
+            n_bootstrap=bootstrap_iterations,
+            confidence_level=0.95,
             seed=seed,
         )
+        ci_eer = boot_res["ci_95_a"]["eer"]
+        ci_dcf05 = boot_res["ci_95_a"]["mindcf_p05"]
+        ci_dcf01 = boot_res["ci_95_a"]["mindcf_p01"]
         results["bootstrap_ci_95"] = {
-            "eer_low_pct": round(float(boot_res["eer"]["ci_low"]) * 100.0, 2),
-            "eer_high_pct": round(float(boot_res["eer"]["ci_high"]) * 100.0, 2),
-            "mindcf_p05_norm_low": round(float(boot_res["mindcf_0.05"]["ci_low"]), 4),
-            "mindcf_p05_norm_high": round(float(boot_res["mindcf_0.05"]["ci_high"]), 4),
-            "mindcf_p01_norm_low": round(float(boot_res["mindcf_0.01"]["ci_low"]), 4),
-            "mindcf_p01_norm_high": round(float(boot_res["mindcf_0.01"]["ci_high"]), 4),
+            "eer_low_pct": round(float(ci_eer[0]) * 100.0, 2),
+            "eer_high_pct": round(float(ci_eer[1]) * 100.0, 2),
+            "mindcf_p05_norm_low": round(float(ci_dcf05[0]), 4),
+            "mindcf_p05_norm_high": round(float(ci_dcf05[1]), 4),
+            "mindcf_p01_norm_low": round(float(ci_dcf01[0]), 4),
+            "mindcf_p01_norm_high": round(float(ci_dcf01[1]), 4),
         }
 
     return results
