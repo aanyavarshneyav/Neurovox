@@ -599,7 +599,10 @@
       const width = Number(!isNil(info.borderline_width) ? info.borderline_width : 2 * margin);
       const lo = !isNil(info.borderline_low) ? Number(info.borderline_low) : thr - margin;
       const hi = !isNil(info.borderline_high) ? Number(info.borderline_high) : thr + margin;
-      $('#model-line').innerHTML = `<strong>Model used by this demo:</strong> ${esc(info.checkpoint_path)} · epoch ${esc(info.checkpoint_epoch)} · dev-clean ${term('EER')} ${num(info.dev_eer, 2)}% ${tagHtml('measured')}`;
+      const paramStr = !isNil(info.parameter_count) ? ` (${fmt(info.parameter_count)} params)` : '';
+      const labelPrefix = info.model_label || "Scaled reproduction on LibriSpeech train-clean-100, not the paper's model";
+      $('#model-line').innerHTML = `<strong>${esc(labelPrefix)}:</strong> ${esc(info.checkpoint_path)}${paramStr} · epoch ${esc(info.checkpoint_epoch)} · dev-clean ${term('EER')} ${num(info.dev_eer, 2)}% ${tagHtml('measured')}`;
+      if ($('#nav-val-model')) $('#nav-val-model').textContent = labelPrefix;
       $('#nav-val-ckpt').textContent = `ep ${info.checkpoint_epoch} · ${num(info.dev_eer, 2)}% EER`;
       $('#res-threshold').textContent = thr.toFixed(4);
       $('#res-borderline').textContent = `${info.borderline_zone || `threshold +/- ${margin.toFixed(2)}`} (width ${width.toFixed(2)}: ${lo.toFixed(4)} to ${hi.toFixed(4)})`;
@@ -607,7 +610,7 @@
       $('#res-dev-eer').textContent = `${num(info.dev_eer, 2)}%`;
       buildGauge(thr, margin);
     } else {
-      $('#model-line').textContent = 'Model used by this demo: unavailable (could not read /api/info).';
+      $('#model-line').textContent = "Scaled reproduction on LibriSpeech train-clean-100, not the paper's model: unavailable (could not read /api/info).";
     }
     const meta = DATA.results && DATA.results.runs && DATA.results.runs.s0 && DATA.results.runs.s0.meta;
     if (meta && !isNil(meta.num_speakers)) {
