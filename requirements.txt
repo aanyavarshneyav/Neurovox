@@ -17,6 +17,11 @@ omegaconf>=2.3.0
 tqdm>=4.66.0
 matplotlib>=3.8.0
 
+# Web demo backend
+fastapi>=0.110.0
+uvicorn>=0.29.0
+python-multipart>=0.0.9
+
 # Development & test suite
 pytest>=7.4.0
 pytest-cov>=4.1.0
