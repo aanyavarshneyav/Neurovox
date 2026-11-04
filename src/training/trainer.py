@@ -14,6 +14,7 @@ import hashlib
 import json
 import logging
 import math
+import os
 from pathlib import Path
 import random
 import subprocess
@@ -178,6 +179,7 @@ class Trainer:
             "torch_version": torch.__version__,
             "git_sha": git_sha,
             "git_dirty": git_dirty,
+            "PYTORCH_ENABLE_MPS_FALLBACK": os.environ.get("PYTORCH_ENABLE_MPS_FALLBACK", "0"),
             "parameter_count": param_count,
             "trainable_parameter_count": trainable_param_count,
             "num_workers": getattr(self.train_loader, "num_workers", 0),

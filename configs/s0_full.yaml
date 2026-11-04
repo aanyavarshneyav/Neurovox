@@ -1,0 +1,83 @@
+# Configuration for Phase 3 Headline Training: S0 Full Architecture (30 epochs)
+# Model: SKA-HNN S0 (C=32, C1=256, d_attn=128, emb_dim=192, 4.168M params)
+# Loss: IAAMSoftmax with AdaptiveDrop (251 classes, s=30, m=0.2, tau=0.423, min_keep_ratio=0.5, fp32)
+# Dataset: LibriSpeech train-clean-100 (251 speakers, 28,539 utterances)
+# Batch Size: B=64 distinct speakers per batch (446 batches per epoch)
+# Optimizer: Adam (lr_init=1e-7, lr_max=1e-3, weight_decay=1e-4, grad_clip=3.0)
+# Evaluation: Periodic full-utterance evaluation on dev-clean every 5 epochs (6,200 trials)
+# RIR: explicitly disabled (no valid RIR download on Mac platform)
+
+project:
+  name: "neurovox"
+  description: "Phase 3 Headline Training: SKA-HNN S0 (30 epochs on LibriSpeech)"
+
+hardware:
+  device: "mps"
+  num_workers: 2
+  pin_memory: false
+
+audio:
+  sampling_rate: 16000
+  n_mels: 80
+  win_length_ms: 25.0
+  hop_length_ms: 10.0
+  segment_frames: 180
+
+data:
+  train_manifest: "data/manifests/train-clean-100.csv"
+
+augmentation:
+  speed_perturbation:
+    enabled: true
+    factors: [0.95, 1.0, 1.05]
+    prob: 0.5
+  rirs_noises:
+    enabled: false
+  synthetic_noise:
+    enabled: true
+    babble_prob: 0.4
+    babble_snr_range: [10.0, 20.0]
+    gaussian_prob: 0.3
+    gaussian_snr_range: [5.0, 15.0]
+  specaugment:
+    enabled: true
+    freq_mask_param: 10
+    time_mask_param: 15
+    p: 0.5
+
+model:
+  name: "ska_hnn"
+  switch: "S0"
+  c_cnn: 32
+  c_tdnn: 256
+  emb_dim: 192
+  attn_dim: 128
+  ls_window: 21
+
+loss:
+  name: "iaam_softmax"
+  num_classes: 251
+  scale: 30.0
+  margin: 0.2
+  adaptive_drop:
+    tau: 0.423
+    warmup_epochs: 5
+    esc_epochs: 5
+    correction_tau: 0.5
+    min_keep_ratio: 0.5
+
+training:
+  batch_size: 64
+  epochs: 30
+  lr_schedule: "cyclic"
+  cycle_epochs: 2
+  lr_init: 1.0e-7
+  lr_max: 1.0e-3
+  weight_decay: 1.0e-4
+  grad_clip: 3.0
+  eval_interval: 5
+  seed: 42
+
+evaluation:
+  eval_dev: true
+  eval_train_probe: false

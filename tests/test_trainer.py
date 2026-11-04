@@ -630,3 +630,88 @@ def test_step_0_baseline_excluded_from_epoch_1_diagnostics(tmp_path):
         assert col in header, f"Column {col} missing from history.csv header"
 
 
+def test_headline_configs_validity():
+    """Verify configs/s0_full.yaml and configs/s1_full.yaml adhere to headline specs."""
+    import yaml
+
+    s0_path = Path("configs/s0_full.yaml")
+    s1_path = Path("configs/s1_full.yaml")
+
+    assert s0_path.exists(), "configs/s0_full.yaml missing"
+    assert s1_path.exists(), "configs/s1_full.yaml missing"
+
+    with open(s0_path, "r", encoding="utf-8") as f:
+        cfg0 = yaml.safe_load(f)
+    with open(s1_path, "r", encoding="utf-8") as f:
+        cfg1 = yaml.safe_load(f)
+
+    # Common headline parameters
+    for cfg, label in [(cfg0, "S0"), (cfg1, "S1")]:
+        assert cfg["training"]["epochs"] == 30, f"{label} epochs must be 30"
+        assert cfg["training"]["eval_interval"] == 5, f"{label} eval_interval must be 5"
+        assert cfg["training"]["seed"] == 42, f"{label} seed default must be 42"
+        assert cfg["training"]["lr_schedule"] == "cyclic"
+        assert cfg["training"]["cycle_epochs"] == 2
+        assert cfg["augmentation"]["rirs_noises"]["enabled"] is False, f"{label} RIR must be explicitly false"
+
+    # S0 specific
+    assert cfg0["model"]["switch"] == "S0"
+    assert cfg0["loss"]["name"] == "iaam_softmax"
+    ad = cfg0["loss"]["adaptive_drop"]
+    assert ad["warmup_epochs"] == 5
+    assert ad["esc_epochs"] == 5
+    assert ad["tau"] == 0.423
+    assert ad["min_keep_ratio"] == 0.5
+
+    # S1 specific
+    assert cfg1["model"]["switch"] == "S1"
+    assert cfg1["loss"]["name"] == "aam_softmax"
+
+
+def test_run_meta_captures_mps_fallback_and_git_dirty(tmp_path, monkeypatch):
+    """Verify run_meta.json records PYTORCH_ENABLE_MPS_FALLBACK, device, precision, and git_dirty."""
+    monkeypatch.setenv("PYTORCH_ENABLE_MPS_FALLBACK", "1")
+
+    device = torch.device("cpu")
+    model = small_tdnn_se(in_features=80, channels=16, emb_dim=32).to(device)
+    loss_fn = AAMSoftmax(in_features=32, num_classes=4).to(device)
+    opt = torch.optim.Adam(model.parameters(), lr=1e-3)
+    loader = build_synthetic_loader(batch_size=4, num_batches=1, num_classes=4)
+
+    trainer = Trainer(
+        model=model,
+        loss_fn=loss_fn,
+        optimizer=opt,
+        train_loader=loader,
+        device=device,
+        precision="fp32",
+        run_id="test_meta_fields",
+    )
+    trainer.results_dir = tmp_path / "res_meta"
+    trainer.ckpt_dir = tmp_path / "ckpt_meta"
+    trainer.results_dir.mkdir(parents=True, exist_ok=True)
+    trainer.ckpt_dir.mkdir(parents=True, exist_ok=True)
+    trainer._write_run_meta()
+
+    meta_file = trainer.results_dir / "run_meta.json"
+    assert meta_file.exists()
+    with open(meta_file, "r", encoding="utf-8") as f:
+        meta = json.load(f)
+
+    assert meta["PYTORCH_ENABLE_MPS_FALLBACK"] == "1"
+    assert meta["device"] == "cpu"
+    assert meta["precision"] == "fp32"
+    assert "git_dirty" in meta
+    assert isinstance(meta["git_dirty"], bool)
+
+
+def test_run_headline_script_exists_and_executable():
+    """Verify scripts/run_headline.sh exists and has execute permissions."""
+    import os
+
+    script_path = Path("scripts/run_headline.sh")
+    assert script_path.exists(), "scripts/run_headline.sh must exist"
+    assert os.access(script_path, os.X_OK), "scripts/run_headline.sh must be executable"
+
+
+
