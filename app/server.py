@@ -16,6 +16,7 @@ Features:
 import argparse
 from contextlib import asynccontextmanager
 import csv
+import hashlib
 import json
 import math
 import os
@@ -58,11 +59,15 @@ from src.utils.paths import PROJECT_ROOT, get_results_root, resolve_path
 
 SAMPLE_RATE = 16000
 MIN_DURATION_SEC = 1.0
+MAX_DURATION_SEC = 30.0
 MIN_SAMPLES = int(SAMPLE_RATE * MIN_DURATION_SEC)
+MAX_SAMPLES = int(SAMPLE_RATE * MAX_DURATION_SEC)
+MIN_AUDIO_RMS = 0.005  # ~ -46 dBFS; dev-clean speech clips have RMS >= 0.044
 BORDERLINE_MARGIN = 0.10
 
 DEFAULT_CHECKPOINT_CANDIDATES = (
     "checkpoints/s0_seed42/best_dev_eer.pt",
+    "demo_ckpt/best_dev_eer.pt",
     "checkpoints/pilot_s0_mac/best_dev_eer.pt",
 )
 
@@ -140,7 +145,29 @@ def decode_audio_bytes_in_memory(
             f"Minimum required duration is {MIN_DURATION_SEC:.1f}s."
         )
 
+    if len(pcm) > MAX_SAMPLES:
+        raise ValueError(
+            f"{label.capitalize()} clip is too long ({duration_sec:.2f}s). "
+            f"Maximum allowed duration is {MAX_DURATION_SEC:.1f}s."
+        )
+
     return pcm, duration_sec
+
+
+def compute_file_sha256(path: Union[str, Path]) -> str:
+    """Compute hex SHA-256 digest of a file in 1 MB chunks."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        while chunk := f.read(1024 * 1024):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def compute_audio_rms(pcm: np.ndarray) -> float:
+    """Compute Root Mean Square (RMS) amplitude of audio PCM samples."""
+    if pcm.size == 0:
+        return 0.0
+    return float(np.sqrt(np.mean(pcm.astype(np.float64) ** 2)))
 
 
 def resolve_checkpoint_path(checkpoint: Optional[Union[str, Path]] = None) -> Path:
@@ -237,26 +264,39 @@ def compute_or_load_threshold(
     ckpt_payload: Dict[str, Any],
     device: torch.device,
     trials_path: Optional[Path] = None,
-) -> Tuple[float, float, int, Path]:
-    """Load cached dev-clean EER threshold next to checkpoint, or recompute if missing."""
+) -> Tuple[float, float, int, Path, str]:
+    """Load cached dev-clean EER threshold matching the checkpoint SHA-256, or recompute."""
     cache_path = get_threshold_cache_path(ckpt_path)
     epoch = int(ckpt_payload.get("epoch", 0))
     stored_dev_eer = ckpt_payload.get("best_dev_eer")
+    ckpt_sha256 = compute_file_sha256(ckpt_path)
 
-    if cache_path.exists():
-        try:
-            with open(cache_path, "r", encoding="utf-8") as f:
-                cached = json.load(f)
-            if "threshold" in cached:
-                threshold = float(cached["threshold"])
-                dev_eer = (
-                    round(float(stored_dev_eer), 2)
-                    if stored_dev_eer is not None and np.isfinite(float(stored_dev_eer))
-                    else round(float(cached.get("dev_eer", cached.get("computed_dev_eer_pct", 0.0))), 2)
-                )
-                return threshold, dev_eer, epoch, cache_path
-        except Exception:
-            pass
+    # Check primary threshold cache file and alternative consistent locations
+    candidates: List[Path] = [cache_path]
+    alt_checkpoints = (PROJECT_ROOT / "checkpoints/s0_seed42/best_dev_eer.threshold.json").resolve()
+    alt_demo = (PROJECT_ROOT / "demo_ckpt/best_dev_eer.threshold.json").resolve()
+    for alt in (alt_checkpoints, alt_demo):
+        if alt not in candidates:
+            candidates.append(alt)
+
+    for cand in candidates:
+        if cand.exists():
+            try:
+                with open(cand, "r", encoding="utf-8") as f:
+                    cached = json.load(f)
+                cached_sha = cached.get("sha256") or cached.get("checkpoint_sha256")
+                cached_thresh = cached.get("threshold") or cached.get("eer_threshold")
+                if cached_sha == ckpt_sha256 and cached_thresh is not None:
+                    threshold = float(cached_thresh)
+                    dev_eer = (
+                        round(float(stored_dev_eer), 2)
+                        if stored_dev_eer is not None and np.isfinite(float(stored_dev_eer))
+                        else round(float(cached.get("dev_eer", cached.get("computed_dev_eer_pct", 0.0))), 2)
+                    )
+                    epoch_val = int(cached.get("epoch", epoch))
+                    return threshold, dev_eer, epoch_val, cand, ckpt_sha256
+            except Exception:
+                pass
 
     if trials_path is None:
         trials_path = resolve_project_file("data/trials/trials_dev-clean.txt")
@@ -278,11 +318,13 @@ def compute_or_load_threshold(
 
     cache_payload = {
         "checkpoint_path": str(ckpt_path),
+        "sha256": ckpt_sha256,
+        "checkpoint_sha256": ckpt_sha256,
         "epoch": epoch,
         "dev_eer": dev_eer,
         "computed_dev_eer_pct": computed_eer_pct,
-        "threshold": threshold,
-        "eer_threshold": threshold,
+        "threshold": round(threshold, 4),
+        "eer_threshold": round(threshold, 4),
         "trials_path": str(trials_path),
     }
     try:
@@ -291,7 +333,7 @@ def compute_or_load_threshold(
     except OSError:
         pass
 
-    return threshold, dev_eer, epoch, cache_path
+    return threshold, dev_eer, epoch, cache_path, ckpt_sha256
 
 
 def classify_verdict(score: float, threshold: float, margin: float = BORDERLINE_MARGIN) -> str:
@@ -1033,6 +1075,7 @@ class ServerState:
         self.parameter_count: int = 0
         self.checkpoint_path: str = ""
         self.checkpoint_abs_path: Optional[Path] = None
+        self.sha256: str = ""
         self.epoch: int = 0
         self.dev_eer: float = 0.0
         self.threshold: float = 0.0
@@ -1064,7 +1107,7 @@ class ServerState:
         param_count = int(summary.total_params)
 
         extractor = EmbeddingExtractor(model=model, device=self.device, batch_size=1)
-        threshold, dev_eer, epoch, cache_path = compute_or_load_threshold(
+        threshold, dev_eer, epoch, cache_path, ckpt_sha256 = compute_or_load_threshold(
             model=model,
             ckpt_path=ckpt_path,
             ckpt_payload=payload if isinstance(payload, dict) else {},
@@ -1083,6 +1126,7 @@ class ServerState:
         self.parameter_count = param_count
         self.checkpoint_path = display_ckpt_path
         self.checkpoint_abs_path = ckpt_path
+        self.sha256 = ckpt_sha256
         self.epoch = epoch
         self.dev_eer = dev_eer
         self.threshold = threshold
@@ -1090,6 +1134,7 @@ class ServerState:
 
         print(
             f"[Neurovox Startup] Checkpoint: {display_ckpt_path} | "
+            f"SHA-256: {self.sha256[:8]}... | "
             f"Epoch: {self.epoch} | Dev EER: {self.dev_eer:.2f}% | "
             f"Threshold: {self.threshold:.4f} | Device: {self.device}",
             flush=True,
@@ -1136,13 +1181,17 @@ async def get_info() -> Dict[str, Any]:
     state = ensure_state_loaded()
     return {
         "model_name": state.model_name,
+        "model_label": "Scaled reproduction on LibriSpeech train-clean-100, not the paper's model",
+        "system_description": "Scaled reproduction on LibriSpeech train-clean-100, not the paper's model",
         "parameter_count": state.parameter_count,
         "checkpoint_path": state.checkpoint_path,
         "checkpoint_epoch": state.epoch,
+        "checkpoint_sha256": state.sha256,
+        "sha256": state.sha256,
         "epoch": state.epoch,
         "dev_eer": state.dev_eer,
         "dev_eer_pct": state.dev_eer,
-        "threshold": state.threshold,
+        "threshold": round(state.threshold, 4),
         "borderline_margin": BORDERLINE_MARGIN,
         "borderline_width": round(2.0 * BORDERLINE_MARGIN, 2),
         "borderline_zone": f"threshold +/- {BORDERLINE_MARGIN:.2f}",
@@ -1249,6 +1298,17 @@ async def verify_speakers(
         return JSONResponse(status_code=500, content={"error": msg, "detail": msg})
     except ValueError as exc:
         msg = str(exc)
+        return JSONResponse(status_code=400, content={"error": msg, "detail": msg})
+
+    # Silence / Low-energy speech guard (RMS must exceed MIN_AUDIO_RMS)
+    rms_enroll = compute_audio_rms(pcm_enroll)
+    if rms_enroll < MIN_AUDIO_RMS:
+        msg = "No speech detected in enrollment clip."
+        return JSONResponse(status_code=400, content={"error": msg, "detail": msg})
+
+    rms_test = compute_audio_rms(pcm_test)
+    if rms_test < MIN_AUDIO_RMS:
+        msg = "No speech detected in test clip."
         return JSONResponse(status_code=400, content={"error": msg, "detail": msg})
 
     assert state.extractor is not None

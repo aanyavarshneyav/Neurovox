@@ -440,7 +440,7 @@ def main() -> int:
         "--bootstrap-iterations",
         type=int,
         default=1000,
-        help="Number of bootstrap resamples for 95% CIs (default: 1000).",
+        help="Number of bootstrap resamples for 95%% CIs (default: 1000).",
     )
     parser.add_argument(
         "--seed",

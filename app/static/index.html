@@ -33,7 +33,7 @@
       <span class="nav-chip">
         <span class="nav-dot" aria-hidden="true"></span>
         <span class="nav-k">MODEL:</span>
-        <span class="nav-v">SKA-HNN + IAAMSoftmax</span>
+        <span class="nav-v" id="nav-val-model">ska_hnn (S0)</span>
       </span>
       <span class="nav-chip" id="nav-chip-ckpt">
         <span class="nav-dot nav-dot-live" aria-hidden="true"></span>
@@ -56,7 +56,7 @@
             <span class="chip" id="data-chip" hidden></span>
           </div>
           <p class="hero-lead">Record or upload two short voice clips. The model turns each into a <span class="term" tabindex="0" data-term="embedding">voiceprint (embedding)</span> and says whether they sound like the same person.</p>
-          <p class="model-line" id="model-line">Model used by this demo: loading…</p>
+          <p class="model-line" id="model-line">Scaled reproduction on LibriSpeech train-clean-100, not the paper's model: loading…</p>
         </div>
 
         <div class="demo-bar-actions">
@@ -72,6 +72,7 @@
       </div>
 
       <div id="mic-alert" class="alert" role="status"></div>
+      <div id="short-warn" class="alert" role="status" hidden></div>
       <div id="error-alert" class="alert" role="alert"></div>
 
       <!-- Three-pane mission-control layout -->
@@ -99,7 +100,7 @@
               </label>
               <div class="clip-status" id="enroll-status">No enrollment clip loaded.</div>
             </div>
-            <audio id="enroll-audio" controls></audio>
+            <audio id="enroll-audio" controls hidden></audio>
           </article>
 
           <article class="card corner-card clip" id="card-test" aria-label="Test clip">
@@ -123,8 +124,17 @@
               </label>
               <div class="clip-status" id="test-status">No test clip loaded.</div>
             </div>
-            <audio id="test-audio" controls></audio>
+            <audio id="test-audio" controls hidden></audio>
           </article>
+
+          <div class="audio-tip" role="note">
+            <svg class="audio-tip-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+              <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2" />
+              <line x1="12" y1="8" x2="12" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+              <circle cx="12" cy="16" r="1" fill="currentColor" />
+            </svg>
+            <span>For more reliable comparisons, record in a quiet environment with clear speech. Background noise, microphone differences, and recording conditions can affect similarity scores.</span>
+          </div>
         </div>
 
         <!-- CENTER PANE: Score Gauge & Verdict Reveal on Glowing Backdrop -->

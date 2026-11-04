@@ -1,0 +1,39 @@
+{
+  "run_id": "s0_seed42",
+  "checkpoint_path": "/Users/aanyavarshney/Documents/GitHub/Neurovox/checkpoints/s0_seed42/best_dev_eer.pt",
+  "checkpoint_sha256": "35bda7b93888775c09bf5f407c405081e22623e5d9ba6b8b2dc9d249c7ae00ff",
+  "checkpoint_epoch": 30,
+  "best_dev_eer_stored": 12.06,
+  "model_architecture": "ska_hnn (S0)",
+  "num_speakers": 209,
+  "num_trials": 8360,
+  "num_targets": 4180,
+  "num_impostors": 4180,
+  "trials_path": "/Users/aanyavarshney/Documents/GitHub/Neurovox/data/trials/trials_train-probe.txt",
+  "trials_sha256": "923d22e5533ecb442787295901ea98dc301948a550ae4cd1440c57da53aa8b7f",
+  "extraction_time_sec": 658.76,
+  "eer": 0.051,
+  "eer_pct": 5.1,
+  "eer_threshold": 0.5785,
+  "mindcf_p05": {
+    "norm": 0.1632,
+    "raw": 0.0082,
+    "threshold": 0.733
+  },
+  "mindcf_p01": {
+    "norm": 0.2117,
+    "raw": 0.0021,
+    "threshold": 0.7668
+  },
+  "bootstrap_ci_95": {
+    "eer_low_pct": 3.56,
+    "eer_high_pct": 6.73,
+    "mindcf_p05_norm_low": 0.114,
+    "mindcf_p05_norm_high": 0.2116,
+    "mindcf_p01_norm_low": 0.1277,
+    "mindcf_p01_norm_high": 0.2835
+  },
+  "device": "mps",
+  "precision": "fp32",
+  "timestamp": "2026-11-04T17:27:29.123855+00:00"
+}

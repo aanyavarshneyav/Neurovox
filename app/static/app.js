@@ -358,13 +358,30 @@
   const verifyBtn = $('#verify-btn');
   const micAlert = $('#mic-alert');
   const errorAlert = $('#error-alert');
+  const shortWarnAlert = $('#short-warn');
   const MAX_RECORD_MS = 10000;
   let enrollBlob = null, testBlob = null, enrollName = 'enrollment.webm', testName = 'test.webm';
+  let enrollDur = null, testDur = null;
 
   function showMic(msg) { micAlert.textContent = msg; micAlert.className = 'alert warn'; }
   function clearError() { errorAlert.textContent = ''; errorAlert.className = 'alert'; }
   function showError(msg) { errorAlert.textContent = msg; errorAlert.className = 'alert error'; }
   function updateVerifyState() { verifyBtn.disabled = !(enrollBlob && testBlob); }
+
+  function updateShortWarn() {
+    if (!shortWarnAlert) return;
+    const isShortEnroll = enrollDur != null && isFinite(enrollDur) && enrollDur >= 1.0 && enrollDur < 3.0;
+    const isShortTest = testDur != null && isFinite(testDur) && testDur >= 1.0 && testDur < 3.0;
+    if (isShortEnroll || isShortTest) {
+      shortWarnAlert.textContent = 'Short recording: Clips under 3 seconds may not contain enough speech information for reliable speaker verification. Try recording a little longer.';
+      shortWarnAlert.className = 'alert warn';
+      shortWarnAlert.hidden = false;
+    } else {
+      shortWarnAlert.textContent = '';
+      shortWarnAlert.className = 'alert';
+      shortWarnAlert.hidden = true;
+    }
+  }
 
   /* ---- gauge ---- */
   const G = { cx: 150, cy: 140, r: 108 };
@@ -445,6 +462,9 @@
     if (!isNil(devEer)) {
       $('#res-dev-eer').textContent = num(devEer, 2) + '%';
     }
+    if (!isNil(d.enrollment_duration)) enrollDur = Number(d.enrollment_duration);
+    if (!isNil(d.test_duration)) testDur = Number(d.test_duration);
+    updateShortWarn();
     const needle = $('#needle');
     setVerdict('…', 'idle', false);
     requestAnimationFrame(() => { needle.style.transform = `rotate(${Math.max(-1, Math.min(1, score)) * 90}deg)`; });
@@ -480,16 +500,25 @@
     }
   }
 
-  function setSlot(slot, blob, filename) {
+  function setSlot(slot, blob, filename, measuredDur) {
     const url = URL.createObjectURL(blob);
     const kb = (blob.size / 1024).toFixed(1);
     if (slot === 'enrollment') {
       enrollBlob = blob; enrollName = filename;
-      $('#enroll-audio').src = url; $('#enroll-status').textContent = `Loaded: ${filename} (${kb} KB)`;
+      enrollDur = (measuredDur != null && isFinite(measuredDur)) ? Number(measuredDur) : null;
+      const audioEl = $('#enroll-audio');
+      audioEl.src = url;
+      audioEl.hidden = false;
+      $('#enroll-status').textContent = `Loaded: ${filename} (${kb} KB)`;
     } else {
       testBlob = blob; testName = filename;
-      $('#test-audio').src = url; $('#test-status').textContent = `Loaded: ${filename} (${kb} KB)`;
+      testDur = (measuredDur != null && isFinite(measuredDur)) ? Number(measuredDur) : null;
+      const audioEl = $('#test-audio');
+      audioEl.src = url;
+      audioEl.hidden = false;
+      $('#test-status').textContent = `Loaded: ${filename} (${kb} KB)`;
     }
+    updateShortWarn();
     updateVerifyState();
   }
 
@@ -554,10 +583,11 @@
         const mime = rec.mimeType || 'audio/webm';
         const ext = mime.indexOf('ogg') >= 0 ? 'ogg' : mime.indexOf('mp4') >= 0 ? 'mp4' : 'webm';
         const blob = new Blob(chunks, { type: mime });
+        const durSec = (performance.now() - t0) / 1000;
         cleanup(stream);
         labelEl.textContent = idleLabel; btn.classList.remove('recording');
         timerEl.textContent = 'Recorded clip ready';
-        setSlot(slot, blob, `${slot}_recording.${ext}`);
+        setSlot(slot, blob, `${slot}_recording.${ext}`, durSec);
       };
       rec.start(100);
       labelEl.textContent = 'Stop recording'; btn.classList.add('recording');
@@ -583,6 +613,20 @@
 
   setupRecorder('enrollment', 'enroll-rec-btn', 'enroll-timer', 'enroll-level-text', 'enroll-meter', 'enroll-file');
   setupRecorder('test', 'test-rec-btn', 'test-timer', 'test-level-text', 'test-meter', 'test-file');
+  $('#enroll-audio').addEventListener('loadedmetadata', (e) => {
+    const d = e.currentTarget.duration;
+    if (isFinite(d) && d > 0) {
+      enrollDur = d;
+      updateShortWarn();
+    }
+  });
+  $('#test-audio').addEventListener('loadedmetadata', (e) => {
+    const d = e.currentTarget.duration;
+    if (isFinite(d) && d > 0) {
+      testDur = d;
+      updateShortWarn();
+    }
+  });
   verifyBtn.addEventListener('click', runVerification);
   $('#example-same-btn').addEventListener('click', () => loadExample('same', '7176-88083-0008.flac', '7176-92135-0037.flac'));
   $('#example-diff-btn').addEventListener('click', () => loadExample('different', '4970-29095-0030.flac', '4992-41797-0000.flac'));
@@ -599,7 +643,10 @@
       const width = Number(!isNil(info.borderline_width) ? info.borderline_width : 2 * margin);
       const lo = !isNil(info.borderline_low) ? Number(info.borderline_low) : thr - margin;
       const hi = !isNil(info.borderline_high) ? Number(info.borderline_high) : thr + margin;
-      $('#model-line').innerHTML = `<strong>Model used by this demo:</strong> ${esc(info.checkpoint_path)} · epoch ${esc(info.checkpoint_epoch)} · dev-clean ${term('EER')} ${num(info.dev_eer, 2)}% ${tagHtml('measured')}`;
+      const paramStr = !isNil(info.parameter_count) ? ` (${fmt(info.parameter_count)} params)` : '';
+      const labelPrefix = info.model_label || "Scaled reproduction on LibriSpeech train-clean-100, not the paper's model";
+      $('#model-line').innerHTML = `<strong>${esc(labelPrefix)}:</strong> ${esc(info.checkpoint_path)}${paramStr} · epoch ${esc(info.checkpoint_epoch)} · dev-clean ${term('EER')} ${num(info.dev_eer, 2)}% ${tagHtml('measured')}`;
+      if ($('#nav-val-model')) $('#nav-val-model').textContent = info.model_name || 'ska_hnn (S0)';
       $('#nav-val-ckpt').textContent = `ep ${info.checkpoint_epoch} · ${num(info.dev_eer, 2)}% EER`;
       $('#res-threshold').textContent = thr.toFixed(4);
       $('#res-borderline').textContent = `${info.borderline_zone || `threshold +/- ${margin.toFixed(2)}`} (width ${width.toFixed(2)}: ${lo.toFixed(4)} to ${hi.toFixed(4)})`;
@@ -607,7 +654,7 @@
       $('#res-dev-eer').textContent = `${num(info.dev_eer, 2)}%`;
       buildGauge(thr, margin);
     } else {
-      $('#model-line').textContent = 'Model used by this demo: unavailable (could not read /api/info).';
+      $('#model-line').textContent = "Scaled reproduction on LibriSpeech train-clean-100, not the paper's model: unavailable (could not read /api/info).";
     }
     const meta = DATA.results && DATA.results.runs && DATA.results.runs.s0 && DATA.results.runs.s0.meta;
     if (meta && !isNil(meta.num_speakers)) {
