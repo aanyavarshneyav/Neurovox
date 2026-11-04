@@ -549,7 +549,7 @@
         <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
           <span id="res-verdict" class="verdict-badge">—</span>
           <span id="res-band-note" style="font-size: 0.85rem; color: var(--muted); font-family: 'SF Mono', Menlo, Consolas, monospace;">
-            borderline zone: threshold +/- 0.10
+            borderline zone: threshold +/- 0.10 (width: 0.20)
           </span>
         </div>
         <div class="result-grid">
@@ -562,8 +562,8 @@
             <span class="info-value" id="res-threshold">—</span>
           </div>
           <div class="info-item">
-            <span class="info-label">Borderline Zone</span>
-            <span class="info-value" id="res-borderline">threshold +/- 0.10</span>
+            <span class="info-label">Borderline Zone &amp; Width</span>
+            <span class="info-value" id="res-borderline">threshold +/- 0.10 (width: 0.20)</span>
           </div>
           <div class="info-item">
             <span class="info-label">Enrollment Duration</span>
@@ -663,8 +663,8 @@
         <div class="chart-box">
           <h4>Main Comparison: <code>dev-clean</code> EER (%) per Epoch (S0 vs S1) <span class="tag tag-measured">measured</span></h4>
           <div id="chart-dev-eer"></div>
-          <div style="font-size: 0.8rem; color: var(--muted); margin-top: 6px;">
-            Evaluated on full-length utterances across 6,200 cross-chapter <code>dev-clean</code> trials every 2 epochs.
+          <div id="dev-eer-caption" style="font-size: 0.8rem; color: var(--muted); margin-top: 6px;">
+            Evaluated on full-length utterances across 6,200 cross-chapter <code>dev-clean</code> trials.
             Vertical dashed line marks <strong>Epoch 5</strong> where AdaptiveDrop activates.
           </div>
         </div>
@@ -1057,11 +1057,13 @@
             verdictEl.className = "verdict-badge verdict-diff";
           }
 
-          const low = (thresh - 0.10).toFixed(4);
-          const high = (thresh + 0.10).toFixed(4);
-          const bandStr = `borderline zone: threshold +/- 0.10 ([${low}, ${high}])`;
+          const margin = Number(data.borderline_margin !== undefined ? data.borderline_margin : 0.10);
+          const width = Number(data.borderline_width !== undefined ? data.borderline_width : (2 * margin));
+          const low = (thresh - margin).toFixed(4);
+          const high = (thresh + margin).toFixed(4);
+          const bandStr = `borderline zone: threshold +/- ${margin.toFixed(2)} (width: ${width.toFixed(2)}, [${low}, ${high}])`;
           document.getElementById("res-band-note").textContent = bandStr;
-          document.getElementById("res-borderline").textContent = `threshold +/- 0.10 ([${low}, ${high}])`;
+          document.getElementById("res-borderline").textContent = `threshold +/- ${margin.toFixed(2)} (width: ${width.toFixed(2)}, [${low}, ${high}])`;
 
           document.getElementById("res-score").textContent = score.toFixed(4);
           document.getElementById("res-threshold").textContent = thresh.toFixed(4);
@@ -1297,8 +1299,12 @@
         const p1 = runs && runs.pilot_s1_mac;
 
         const banner = document.getElementById("curves-status-banner");
+        const s0EvalInterval = s0 && s0.eval_interval ? s0.eval_interval : null;
+        const s0IntervalStr = s0EvalInterval
+          ? (s0EvalInterval === 1 ? "eval every epoch" : `eval every ${s0EvalInterval} epochs`)
+          : "";
         const s0Status = s0
-          ? `<strong>S0 (<code>${s0.run_id}</code>):</strong> ${s0.num_epochs_logged} epochs logged, best <code>dev-clean</code> EER = <code>${s0.best_dev_eer_pct}%</code> (epoch ${s0.best_dev_epoch}) ${tagHtml("measured")}`
+          ? `<strong>S0 (<code>${s0.run_id}</code>):</strong> ${s0.num_epochs_logged} epochs logged${s0IntervalStr ? ` (${s0IntervalStr})` : ""}, best <code>dev-clean</code> EER = <code>${s0.best_dev_eer_pct}%</code> (epoch ${s0.best_dev_epoch}) ${tagHtml("measured")}`
           : `<strong>S0:</strong> not run yet`;
         const s1Status = s1
           ? `<strong>S1 (<code>${s1.run_id}</code>):</strong> ${s1.num_epochs_logged} epochs logged ${tagHtml("measured")}`
@@ -1318,6 +1324,16 @@
         const s0DevPts = s0.epochs
           .filter((r) => r.dev_eer_pct !== null && r.dev_eer_pct !== undefined)
           .map((r) => ({ x: r.epoch, y: Number(r.dev_eer_pct) }));
+
+        const evalIntervalText = s0EvalInterval
+          ? (s0EvalInterval === 1 ? "every epoch" : `every ${s0EvalInterval} epochs`)
+          : (s0DevPts.length > 0 ? `at epochs ${s0DevPts.map((p) => p.x).join(", ")}` : "interval not run yet");
+        const captionEl = document.getElementById("dev-eer-caption");
+        if (captionEl) {
+          captionEl.innerHTML =
+            `Evaluated on full-length utterances across 6,200 cross-chapter <code>dev-clean</code> trials <strong>${evalIntervalText}</strong> ` +
+            `(derived from <code>run_meta.json</code> / <code>history.csv</code>). Vertical dashed line marks <strong>Epoch 5</strong> where AdaptiveDrop activates.`;
+        }
 
         const devSeries = [
           { label: "S0 dev-clean EER (%) [measured]", color: "#1d4ed8", points: s0DevPts },
@@ -1479,35 +1495,67 @@
       function renderTimingSection(runs, benchmarks) {
         const p0 = runs && runs.pilot_s0_mac && runs.pilot_s0_mac.epochs && runs.pilot_s0_mac.epochs[0];
         const p1 = runs && runs.pilot_s1_mac && runs.pilot_s1_mac.epochs && runs.pilot_s1_mac.epochs[0];
-        const p0Colab = runs && runs.pilot_s0_colab && runs.pilot_s0_colab.epochs && runs.pilot_s0_colab.epochs[0];
-        const p1Colab = runs && runs.pilot_s1_colab && runs.pilot_s1_colab.epochs && runs.pilot_s1_colab.epochs[0];
-
-        const rows = [
-          { label: "Mac M3 Pro — Pilot S0 (pilot_s0_mac, ep 1)", data: p0, platform: "Mac M3 Pro (mps, fp32)" },
-          { label: "Mac M3 Pro — Pilot S1 (pilot_s1_mac, ep 1)", data: p1, platform: "Mac M3 Pro (mps, fp32)" },
-          { label: "Colab T4 — Pilot S0 (pilot_s0_colab)", data: p0Colab, platform: "Colab Tesla T4 (cuda)" },
-          { label: "Colab T4 — Pilot S1 (pilot_s1_colab)", data: p1Colab, platform: "Colab Tesla T4 (cuda)" },
+        const colabWallclock = (benchmarks && benchmarks.colab_pilot_wallclock) || [
+          {
+            run_label: "S0 pilot",
+            platform_label: "Colab T4, whole-run wall-clock (old code, before timing instrumentation; no breakdown)",
+            total_sec: 637.21,
+            label_type: "measured",
+          },
+          {
+            run_label: "S1 pilot (first run)",
+            platform_label: "Colab T4, whole-run wall-clock (old code, before timing instrumentation; no breakdown)",
+            total_sec: 638.17,
+            label_type: "measured",
+          },
+          {
+            run_label: "S1 pilot (rerun)",
+            platform_label: "Colab T4, whole-run wall-clock (old code, before timing instrumentation; no breakdown)",
+            total_sec: 651.02,
+            label_type: "measured",
+          },
         ];
 
-        // Render horizontal stacked bar SVG for pilot timings
-        const svgW = 480;
-        const svgH = 190;
-        let svg = `<svg class="chart-svg" viewBox="0 0 ${svgW} ${svgH}" role="img" aria-label="Pilot Epoch Timing">`;
-        svg += `<rect x="12" y="8" width="10" height="10" fill="#64748b" /><text x="26" y="17" font-size="10" fill="#0f172a">Data Wait (s)</text>`;
-        svg += `<rect x="115" y="8" width="10" height="10" fill="#1d4ed8" /><text x="129" y="17" font-size="10" fill="#0f172a">Model Compute (s)</text>`;
-        svg += `<rect x="245" y="8" width="10" height="10" fill="#0d9488" /><text x="259" y="17" font-size="10" fill="#0f172a">Dev-Clean Eval (s)</text>`;
+        const rows = [
+          {
+            shortLabel: "Mac M3 Pro — S0 pilot",
+            label: "Mac M3 Pro — Pilot S0 (pilot_s0_mac, ep 1)",
+            data: p0,
+            hasBreakdown: true,
+          },
+          {
+            shortLabel: "Mac M3 Pro — S1 pilot",
+            label: "Mac M3 Pro — Pilot S1 (pilot_s1_mac, ep 1)",
+            data: p1,
+            hasBreakdown: true,
+          },
+          ...colabWallclock.map((c) => ({
+            shortLabel: `Colab T4 — ${c.run_label}`,
+            label: `${c.run_label} — ${c.platform_label}`,
+            data: c,
+            hasBreakdown: false,
+          })),
+        ];
 
-        const maxTotal = 340;
-        const barLeft = 155;
-        const barMaxW = 290;
+        // Render horizontal bar SVG for pilot timings
+        const svgW = 500;
+        const svgH = 44 + rows.length * 36;
+        let svg = `<svg class="chart-svg" viewBox="0 0 ${svgW} ${svgH}" role="img" aria-label="Pilot Epoch Timing">`;
+        svg += `<rect x="8" y="8" width="9" height="9" fill="#64748b" /><text x="20" y="16" font-size="9.2" fill="#0f172a">Data Wait</text>`;
+        svg += `<rect x="78" y="8" width="9" height="9" fill="#1d4ed8" /><text x="90" y="16" font-size="9.2" fill="#0f172a">Compute</text>`;
+        svg += `<rect x="145" y="8" width="9" height="9" fill="#0d9488" /><text x="157" y="16" font-size="9.2" fill="#0f172a">Dev Eval</text>`;
+        svg += `<rect x="212" y="8" width="9" height="9" fill="#7c3aed" /><text x="224" y="16" font-size="9.2" fill="#0f172a">Colab T4, whole-run wall-clock (no breakdown)</text>`;
+
+        const maxTotal = 700;
+        const barLeft = 170;
+        const barMaxW = 275;
         rows.forEach((item, idx) => {
           const y = 34 + idx * 36;
-          const shortTitle = item.label.split("(")[0].trim();
-          svg += `<text x="${barLeft - 8}" y="${y + 15}" text-anchor="end" font-size="10" font-weight="600" fill="#0f172a">${shortTitle}</text>`;
+          svg += `<text x="${barLeft - 8}" y="${y + 15}" text-anchor="end" font-size="9.5" font-weight="600" fill="#0f172a">${item.shortLabel}</text>`;
           if (!item.data) {
             svg += `<rect x="${barLeft}" y="${y}" width="${barMaxW}" height="22" fill="#f1f5f9" stroke="#cbd5e1" stroke-dasharray="3,3" rx="3" />`;
             svg += `<text x="${barLeft + 10}" y="${y + 15}" font-size="10" fill="#64748b">not run yet</text>`;
-          } else {
+          } else if (item.hasBreakdown) {
             const dw = Number(item.data.data_loading_sec || 0);
             const comp = Number(item.data.forward_backward_optimizer_sec || 0);
             const ev = Number(item.data.dev_clean_eval_sec || item.data.eval_sec || 0);
@@ -1518,7 +1566,12 @@
             svg += `<rect x="${barLeft}" y="${y}" width="${wDw.toFixed(1)}" height="22" fill="#64748b"><title>Data wait: ${dw}s</title></rect>`;
             svg += `<rect x="${(barLeft + wDw).toFixed(1)}" y="${y}" width="${wComp.toFixed(1)}" height="22" fill="#1d4ed8"><title>Compute: ${comp}s</title></rect>`;
             svg += `<rect x="${(barLeft + wDw + wComp).toFixed(1)}" y="${y}" width="${wEv.toFixed(1)}" height="22" fill="#0d9488"><title>Dev Eval: ${ev}s</title></rect>`;
-            svg += `<text x="${(barLeft + wDw + wComp + wEv + 6).toFixed(1)}" y="${y + 15}" font-size="10" font-weight="600" fill="#0f172a">${tot.toFixed(1)}s</text>`;
+            svg += `<text x="${(barLeft + wDw + wComp + wEv + 6).toFixed(1)}" y="${y + 15}" font-size="10" font-weight="600" fill="#0f172a">${tot.toFixed(2)}s</text>`;
+          } else {
+            const tot = Number(item.data.total_sec || 0);
+            const wTot = (tot / maxTotal) * barMaxW;
+            svg += `<rect x="${barLeft}" y="${y}" width="${wTot.toFixed(1)}" height="22" fill="#7c3aed" rx="2"><title>${item.label}: ${tot.toFixed(2)}s</title></rect>`;
+            svg += `<text x="${(barLeft + wTot + 6).toFixed(1)}" y="${y + 15}" font-size="10" font-weight="600" fill="#0f172a">${tot.toFixed(2)}s</text>`;
           }
         });
         svg += `</svg>`;
@@ -1535,13 +1588,21 @@
               <td colspan="4" style="color:var(--muted);">not run yet</td>
               <td>${tagHtml(null)}</td>
             </tr>`;
-          } else {
+          } else if (item.hasBreakdown) {
             const r = item.data;
             tHtml += `<tr>
               <td><strong>${item.label}</strong></td>
               <td class="num">${Number(r.data_loading_sec).toFixed(2)}s</td>
               <td class="num">${Number(r.forward_backward_optimizer_sec).toFixed(2)}s</td>
               <td class="num">${Number(r.dev_clean_eval_sec || r.eval_sec).toFixed(2)}s</td>
+              <td class="num"><strong>${Number(r.total_sec).toFixed(2)}s</strong></td>
+              <td>${tagHtml("measured")}</td>
+            </tr>`;
+          } else {
+            const r = item.data;
+            tHtml += `<tr>
+              <td><strong>${item.label}</strong></td>
+              <td colspan="3" style="color:var(--muted); font-size:0.8rem;">Colab T4, whole-run wall-clock (old code, before timing instrumentation; no breakdown)</td>
               <td class="num"><strong>${Number(r.total_sec).toFixed(2)}s</strong></td>
               <td>${tagHtml("measured")}</td>
             </tr>`;

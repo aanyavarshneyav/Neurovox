@@ -356,6 +356,38 @@ def _parse_float_from_markdown(cell: str) -> Optional[float]:
         return None
 
 
+def _derive_eval_interval(meta: Dict[str, Any], epochs: List[Dict[str, Any]]) -> Optional[int]:
+    """Read eval_interval from run_meta.json/config if present; otherwise derive from dev_eer_pct epochs in history.csv."""
+    for candidate in (
+        meta.get("eval_interval"),
+        (meta.get("config") or {}).get("eval_interval") if isinstance(meta.get("config"), dict) else None,
+        (meta.get("training") or {}).get("eval_interval") if isinstance(meta.get("training"), dict) else None,
+    ):
+        parsed = _parse_num(candidate)
+        if isinstance(parsed, int) and parsed > 0:
+            return parsed
+
+    eval_epochs = [
+        int(r["epoch"])
+        for r in epochs
+        if r.get("dev_eer_pct") is not None and r.get("epoch") is not None
+    ]
+    if len(eval_epochs) >= 2:
+        diffs = [
+            eval_epochs[i] - eval_epochs[i - 1]
+            for i in range(1, len(eval_epochs))
+            if eval_epochs[i] > eval_epochs[i - 1]
+        ]
+        if diffs:
+            interval = diffs[0]
+            for d in diffs[1:]:
+                interval = math.gcd(interval, d)
+            return int(interval) if interval > 0 else None
+    elif len(eval_epochs) == 1:
+        return int(eval_epochs[0]) if eval_epochs[0] > 0 else None
+    return None
+
+
 def _load_single_run(run_dir: Path) -> Optional[Dict[str, Any]]:
     """Read history.csv and run_meta.json from a single results/<run_id> folder."""
     if not run_dir.is_dir():
@@ -406,6 +438,13 @@ def _load_single_run(run_dir: Path) -> Optional[Dict[str, Any]]:
         except Exception:
             epochs = []
 
+    eval_epochs = [
+        int(r["epoch"])
+        for r in epochs
+        if r.get("dev_eer_pct") is not None and r.get("epoch") is not None
+    ]
+    eval_interval = _derive_eval_interval(meta, epochs)
+
     eval_dev_eers = [
         float(r["dev_eer_pct"]) for r in epochs if r.get("dev_eer_pct") is not None
     ]
@@ -422,6 +461,8 @@ def _load_single_run(run_dir: Path) -> Optional[Dict[str, Any]]:
         "label_type": "measured",
         "meta": meta,
         "num_epochs_logged": len(epochs),
+        "eval_interval": eval_interval,
+        "eval_epochs": eval_epochs,
         "best_dev_eer_pct": best_dev_eer,
         "best_dev_epoch": best_dev_epoch,
         "epochs": epochs,
@@ -546,7 +587,7 @@ def _parse_architecture_doc(
                         status = (
                             f"trained ({ep_cnt}/30 epochs; best dev EER {best_eer:.2f}%)"
                             if ep_cnt < 30 and best_eer is not None
-                            else "trained"
+                            else (f"trained ({ep_cnt} epochs; best dev EER {best_eer:.2f}%)" if best_eer is not None else "trained")
                         )
                     elif "pilot_s0_mac" in all_runs:
                         status = "pilot trained (1 ep)"
@@ -801,7 +842,6 @@ def _parse_benchmarks_and_ledger(
                             "mac_label_type": "measured" if mac_ms is not None else "planned",
                             "colab_median_ms": colab_ms,
                             "colab_steps_per_sec": _parse_float_from_markdown(r[7]),
-                            "colab_peak_vram_mb": _parse_float_from_markdown(r[8]),
                             "colab_label_type": "measured" if colab_ms is not None else None,
                         }
                     )
@@ -864,10 +904,47 @@ def _parse_benchmarks_and_ledger(
     else:
         missing_sources.append("docs/RESULTS_LOG.md")
 
+    colab_pilot_label = (
+        "Colab T4, whole-run wall-clock (old code, before timing instrumentation; no breakdown)"
+    )
+    colab_pilot_wallclock = [
+        {
+            "run_label": "S0 pilot",
+            "platform_label": colab_pilot_label,
+            "label": f"S0 pilot — {colab_pilot_label}",
+            "total_sec": 637.21,
+            "data_loading_sec": None,
+            "forward_backward_optimizer_sec": None,
+            "dev_clean_eval_sec": None,
+            "label_type": "measured",
+        },
+        {
+            "run_label": "S1 pilot (first run)",
+            "platform_label": colab_pilot_label,
+            "label": f"S1 pilot (first run) — {colab_pilot_label}",
+            "total_sec": 638.17,
+            "data_loading_sec": None,
+            "forward_backward_optimizer_sec": None,
+            "dev_clean_eval_sec": None,
+            "label_type": "measured",
+        },
+        {
+            "run_label": "S1 pilot (rerun)",
+            "platform_label": colab_pilot_label,
+            "label": f"S1 pilot (rerun) — {colab_pilot_label}",
+            "total_sec": 651.02,
+            "data_loading_sec": None,
+            "forward_backward_optimizer_sec": None,
+            "dev_clean_eval_sec": None,
+            "label_type": "measured",
+        },
+    ]
+
     return {
         "hardware_throughput": hardware_rows,
         "dataloader_mac": dataloader_mac_rows,
         "dataloader_colab": dataloader_colab_rows,
+        "colab_pilot_wallclock": colab_pilot_wallclock,
         "external_references": external_refs,
         "ledger_entries": ledger_entries,
     }
@@ -900,14 +977,14 @@ def _build_tier_status(all_runs: Dict[str, Any], external_refs: List[Dict[str, A
             "name": "Core Proposed Systems (Scaled SKA-HNN S0 & S1)",
             "code_status": "implemented",
             "training_status": (
-                f"S0 training ({s0_ep}/30 epochs, best dev EER {s0_best:.2f}% [measured]); "
+                f"S0 {'trained' if s0_ep >= 30 else 'training'} ({s0_ep}/30 epochs, best dev EER {s0_best:.2f}% [measured]); "
                 f"S1 pilot trained (1 ep, 22.00% dev EER [measured]), S1 30-ep {'trained' if s1_ep > 0 else 'pending'}"
                 if (s0_ep > 0 and s0_best is not None)
                 else "pilots trained; 30-ep pending"
             ),
             "details": (
                 "Scaled SKA-HNN (C=32, C1=256, 4,167,700 params [measured]) with IAAMSoftmax (S0) and AAMSoftmax (S1). "
-                "Mac M3 Pro 1-epoch pilots completed for both S0 and S1; S0 seed 42 headline run active."
+                "Mac M3 Pro and Colab T4 1-epoch pilots completed for both S0 and S1; S0 seed 42 headline run logged."
             ),
         },
         {
@@ -1067,6 +1144,7 @@ async def get_info() -> Dict[str, Any]:
         "dev_eer_pct": state.dev_eer,
         "threshold": state.threshold,
         "borderline_margin": BORDERLINE_MARGIN,
+        "borderline_width": round(2.0 * BORDERLINE_MARGIN, 2),
         "borderline_zone": f"threshold +/- {BORDERLINE_MARGIN:.2f}",
         "borderline_low": round(state.threshold - BORDERLINE_MARGIN, 4),
         "borderline_high": round(state.threshold + BORDERLINE_MARGIN, 4),
@@ -1188,9 +1266,11 @@ async def verify_speakers(
             "cosine_score": round(cosine_score, 4),
             "threshold": round(threshold, 4),
             "borderline_margin": BORDERLINE_MARGIN,
+            "borderline_width": round(2.0 * BORDERLINE_MARGIN, 2),
             "borderline_zone": f"threshold +/- {BORDERLINE_MARGIN:.2f}",
             "borderline_band": {
                 "margin": BORDERLINE_MARGIN,
+                "width": round(2.0 * BORDERLINE_MARGIN, 2),
                 "low": round(threshold - BORDERLINE_MARGIN, 4),
                 "high": round(threshold + BORDERLINE_MARGIN, 4),
             },
