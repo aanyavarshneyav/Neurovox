@@ -1,0 +1,25 @@
+[
+  {
+    "epoch": 1,
+    "sampler_epoch": 1,
+    "first_batch_index_hash": "f42093f27df7f2c9",
+    "unique_utts_this_epoch": 17884,
+    "cum_unique_utts": 17884,
+    "train_loss": 9.9911,
+    "train_loss_unrounded": 9.991128827424328,
+    "train_acc": 19.48,
+    "train_sec": 228.76,
+    "data_loading_sec": 1.19,
+    "forward_backward_optimizer_sec": 227.56,
+    "lr": 0.001,
+    "grad_norm": 20.6335,
+    "eval_sec": 46.3,
+    "dev_clean_eval_sec": 46.3,
+    "dev_eer_pct": 22.0,
+    "dev_mindcf_05": 0.7977,
+    "train_probe_eer_pct": null,
+    "peak_gpu_memory_bytes": 0,
+    "num_workers": 2,
+    "total_sec": 275.1
+  }
+]

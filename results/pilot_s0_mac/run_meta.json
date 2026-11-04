@@ -1,0 +1,45 @@
+{
+  "run_id": "pilot_s0_mac",
+  "config_hash": "9b664c5a",
+  "seed": 42,
+  "device": "mps",
+  "precision": "fp32",
+  "augmentation_flags": {
+    "speed": true,
+    "noise": true,
+    "babble": true,
+    "rir": false,
+    "specaug": true
+  },
+  "augmentation_probabilities": {
+    "speed": 0.5,
+    "noise": 0.3,
+    "babble": 0.4,
+    "rir": 0.0,
+    "specaug": 0.5
+  },
+  "torch_version": "2.15.0",
+  "git_sha": "db7bf7117f65f367bd61b4699c88c4b37bafd6e6",
+  "git_dirty": true,
+  "parameter_count": 4167700,
+  "trainable_parameter_count": 4167700,
+  "num_workers": 2,
+  "peak_gpu_memory_bytes": 0,
+  "batch_size": 64,
+  "batches_per_epoch": 446,
+  "grad_clip": 3.0,
+  "lr_schedule": {
+    "type": "CyclicLR",
+    "base_lrs": [
+      1e-07
+    ],
+    "max_lrs": [
+      0.001
+    ],
+    "total_size": 892.0,
+    "step_size_up": 446,
+    "mode": "triangular"
+  },
+  "dataset_size": 28539,
+  "num_speakers": 251
+}

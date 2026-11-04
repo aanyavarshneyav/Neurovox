@@ -110,3 +110,4 @@ def test_instantiate_model_fallback(tmp_path: Path):
     model, name = instantiate_model_for_checkpoint(payload_small, torch.device("cpu"))
     assert "small_tdnn_se" in name
     assert isinstance(model, torch.nn.Module)
+
