@@ -358,13 +358,30 @@
   const verifyBtn = $('#verify-btn');
   const micAlert = $('#mic-alert');
   const errorAlert = $('#error-alert');
+  const shortWarnAlert = $('#short-warn');
   const MAX_RECORD_MS = 10000;
   let enrollBlob = null, testBlob = null, enrollName = 'enrollment.webm', testName = 'test.webm';
+  let enrollDur = null, testDur = null;
 
   function showMic(msg) { micAlert.textContent = msg; micAlert.className = 'alert warn'; }
   function clearError() { errorAlert.textContent = ''; errorAlert.className = 'alert'; }
   function showError(msg) { errorAlert.textContent = msg; errorAlert.className = 'alert error'; }
   function updateVerifyState() { verifyBtn.disabled = !(enrollBlob && testBlob); }
+
+  function updateShortWarn() {
+    if (!shortWarnAlert) return;
+    const isShortEnroll = enrollDur != null && isFinite(enrollDur) && enrollDur >= 1.0 && enrollDur < 3.0;
+    const isShortTest = testDur != null && isFinite(testDur) && testDur >= 1.0 && testDur < 3.0;
+    if (isShortEnroll || isShortTest) {
+      shortWarnAlert.textContent = 'Short recording: Clips under 3 seconds may not contain enough speech information for reliable speaker verification. Try recording a little longer.';
+      shortWarnAlert.hidden = false;
+      shortWarnAlert.style.display = 'block';
+    } else {
+      shortWarnAlert.textContent = '';
+      shortWarnAlert.hidden = true;
+      shortWarnAlert.style.display = 'none';
+    }
+  }
 
   /* ---- gauge ---- */
   const G = { cx: 150, cy: 140, r: 108 };
@@ -445,6 +462,9 @@
     if (!isNil(devEer)) {
       $('#res-dev-eer').textContent = num(devEer, 2) + '%';
     }
+    if (!isNil(d.enrollment_duration)) enrollDur = Number(d.enrollment_duration);
+    if (!isNil(d.test_duration)) testDur = Number(d.test_duration);
+    updateShortWarn();
     const needle = $('#needle');
     setVerdict('…', 'idle', false);
     requestAnimationFrame(() => { needle.style.transform = `rotate(${Math.max(-1, Math.min(1, score)) * 90}deg)`; });
@@ -480,16 +500,19 @@
     }
   }
 
-  function setSlot(slot, blob, filename) {
+  function setSlot(slot, blob, filename, measuredDur) {
     const url = URL.createObjectURL(blob);
     const kb = (blob.size / 1024).toFixed(1);
     if (slot === 'enrollment') {
       enrollBlob = blob; enrollName = filename;
+      enrollDur = (measuredDur != null && isFinite(measuredDur)) ? Number(measuredDur) : null;
       $('#enroll-audio').src = url; $('#enroll-status').textContent = `Loaded: ${filename} (${kb} KB)`;
     } else {
       testBlob = blob; testName = filename;
+      testDur = (measuredDur != null && isFinite(measuredDur)) ? Number(measuredDur) : null;
       $('#test-audio').src = url; $('#test-status').textContent = `Loaded: ${filename} (${kb} KB)`;
     }
+    updateShortWarn();
     updateVerifyState();
   }
 
@@ -554,10 +577,11 @@
         const mime = rec.mimeType || 'audio/webm';
         const ext = mime.indexOf('ogg') >= 0 ? 'ogg' : mime.indexOf('mp4') >= 0 ? 'mp4' : 'webm';
         const blob = new Blob(chunks, { type: mime });
+        const durSec = (performance.now() - t0) / 1000;
         cleanup(stream);
         labelEl.textContent = idleLabel; btn.classList.remove('recording');
         timerEl.textContent = 'Recorded clip ready';
-        setSlot(slot, blob, `${slot}_recording.${ext}`);
+        setSlot(slot, blob, `${slot}_recording.${ext}`, durSec);
       };
       rec.start(100);
       labelEl.textContent = 'Stop recording'; btn.classList.add('recording');
@@ -583,6 +607,20 @@
 
   setupRecorder('enrollment', 'enroll-rec-btn', 'enroll-timer', 'enroll-level-text', 'enroll-meter', 'enroll-file');
   setupRecorder('test', 'test-rec-btn', 'test-timer', 'test-level-text', 'test-meter', 'test-file');
+  $('#enroll-audio').addEventListener('loadedmetadata', (e) => {
+    const d = e.currentTarget.duration;
+    if (isFinite(d) && d > 0) {
+      enrollDur = d;
+      updateShortWarn();
+    }
+  });
+  $('#test-audio').addEventListener('loadedmetadata', (e) => {
+    const d = e.currentTarget.duration;
+    if (isFinite(d) && d > 0) {
+      testDur = d;
+      updateShortWarn();
+    }
+  });
   verifyBtn.addEventListener('click', runVerification);
   $('#example-same-btn').addEventListener('click', () => loadExample('same', '7176-88083-0008.flac', '7176-92135-0037.flac'));
   $('#example-diff-btn').addEventListener('click', () => loadExample('different', '4970-29095-0030.flac', '4992-41797-0000.flac'));

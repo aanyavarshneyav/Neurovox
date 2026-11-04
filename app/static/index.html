@@ -72,6 +72,7 @@
       </div>
 
       <div id="mic-alert" class="alert" role="status"></div>
+      <div id="short-warn" class="alert warn" role="status" hidden></div>
       <div id="error-alert" class="alert" role="alert"></div>
 
       <!-- Three-pane mission-control layout -->
@@ -125,6 +126,15 @@
             </div>
             <audio id="test-audio" controls></audio>
           </article>
+
+          <div class="audio-tip" role="note">
+            <svg class="audio-tip-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+              <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2" />
+              <line x1="12" y1="8" x2="12" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+              <circle cx="12" cy="16" r="1" fill="currentColor" />
+            </svg>
+            <span>For more reliable comparisons, record in a quiet environment with clear speech. Background noise, microphone differences, and recording conditions can affect similarity scores.</span>
+          </div>
         </div>
 
         <!-- CENTER PANE: Score Gauge & Verdict Reveal on Glowing Backdrop -->
