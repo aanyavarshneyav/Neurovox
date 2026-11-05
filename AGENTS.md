@@ -25,7 +25,7 @@
 ---
 
 ## 3. Scientific Integrity Rules (Strictly Enforced)
-1. **Measured Numbers Only:** NEVER state a number as an experimental result unless it was measured and logged in [docs/RESULTS_LOG.md](file:///Users/aanyavarshney/Documents/GitHub/Neurovox/docs/RESULTS_LOG.md) with an active `run_id` and config hash. Any anticipated or literature-derived number must be explicitly tagged `[HYPOTHESIS]`.
+1. **Measured Numbers Only:** NEVER state a number as an experimental result unless it was measured and logged in [docs/RESULTS_LOG.md](file:///Users/aanyavarshney/Documents/GitHub/Neurovox/docs/RESULTS_LOG.md) with an active `run_id` and config hash. Any anticipated or literature-derived number must be explicitly tagged `[HYPOTHESIS]`, unless i explicitly tell you to do so.
 2. **Torchinfo Parameter Counts:** Parameter counts must NEVER be hand-calculated. All parameter figures must originate from `torchinfo.summary()` execution via `.agents/workflows/param-audit.md`. Until measured, mark counts as `"TBD: measure with torchinfo"`.
 3. **Mandatory Provenance Tags:** Every specification claim, hyperparameter, and formula must carry an unambiguous provenance tag:
    - `[Paper]`: Verbatim or mathematically direct from Alam et al. (IJCNN 2025).

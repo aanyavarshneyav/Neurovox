@@ -7,7 +7,7 @@ alwaysApply: true
 
 1. **Never State Unrun Numbers as Facts:**
    - Any number claimed as an experimental result must be measured from an executed model run and recorded in `docs/RESULTS_LOG.md` with an active `run_id`.
-   - Any unrun, literature, or anticipated number must be explicitly labeled `[HYPOTHESIS]`.
+   - Any unrun, literature, or anticipated number must be explicitly labeled `[HYPOTHESIS]`, unless i explicitly tell you to do so.
 2. **Never Hand-Calculate Parameter Counts:**
    - Layer and total parameter counts must originate strictly from `torchinfo.summary()` execution via `.agents/workflows/param-audit.md`.
    - Until measured, all parameter counts in documentation must be written as `"TBD: measure with torchinfo"`.
