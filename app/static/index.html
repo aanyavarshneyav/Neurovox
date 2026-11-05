@@ -216,20 +216,111 @@
     </section>
 
     <!-- ================= 3. RESULTS ================= -->
-    <section role="tabpanel" id="panel-results" aria-labelledby="tab-results" tabindex="0" class="tabpanel" hidden>
+    <section role="tabpanel" id="panel-results" aria-labelledby="tab-results" tabindex="0" class="tabpanel results-panel" hidden>
       <div class="panel-head">
         <div>
-          <span class="micro-label">TRAINING &amp; EVALUATION TELEMETRY</span>
+          <span class="micro-label">EXPERIMENTAL RESULTS DASHBOARD · DEV-CLEAN EVALUATION TELEMETRY</span>
           <h2>Results</h2>
-          <p>Measured on the <span class="term" tabindex="0" data-term="dev-clean">dev-clean</span> set during training. Lower <span class="term" tabindex="0" data-term="EER">EER</span> is better.</p>
+          <p>All metrics are evaluated on the development set (<span class="term" tabindex="0" data-term="dev-clean">dev-clean</span>, 40 speakers, 6,200 cross-chapter trials). Lower <span class="term" tabindex="0" data-term="EER">EER</span> and <span class="term" tabindex="0" data-term="minDCF">minDCF</span> are better.</p>
         </div>
         <div class="panel-actions">
           <button type="button" class="btn" id="btn-view-data">View data</button>
           <button type="button" class="btn" id="btn-view-timing">Training time</button>
         </div>
       </div>
-      <div class="stat-row" id="stat-row"></div>
-      <div class="chart-grid" id="chart-grid"><p class="muted">Loading…</p></div>
+
+      <!-- SECTION A: Main S0 vs S1 Comparison (MEASURED ONLY) -->
+      <section class="dash-section" id="sec-main-s0-s1" aria-labelledby="sec-heading-a">
+        <div class="dash-section-head">
+          <div>
+            <span class="micro-label">SECTION A · HEADLINE MULTI-SEED COMPARISON (MEASURED DATA ONLY)</span>
+            <h3 id="sec-heading-a">A. Main S0 vs S1 Comparison (Development Set: <code>dev-clean</code>)</h3>
+          </div>
+          <div class="dash-section-badges" id="sec-a-badges">
+            <span class="tag tag-measured">measured only</span>
+          </div>
+        </div>
+        <div class="stat-row" id="stat-row"></div>
+        <div id="s0-s1-summary-wrap"></div>
+        <div class="headline-charts-grid" id="headline-charts-grid"></div>
+        <div class="card corner-card epoch-traj-card">
+          <div class="epoch-traj-head">
+            <div>
+              <span class="micro-label">PER-EPOCH TELEMETRY TRAJECTORIES · HISTORY.CSV</span>
+              <h4>Development-Set Evaluation &amp; Training Curves by Seed</h4>
+            </div>
+            <div class="seg-group" id="epoch-seed-selector" role="group" aria-label="Select seed for per-epoch curves"></div>
+          </div>
+          <div class="chart-grid" id="chart-grid"><p class="muted">Loading…</p></div>
+        </div>
+      </section>
+
+      <!-- SECTION B: Label-Noise Robustness -->
+      <section class="dash-section" id="sec-label-noise" aria-labelledby="sec-heading-b">
+        <div class="card corner-card dash-large-card" id="noise-card">
+          <div class="dash-section-head">
+            <div>
+              <span class="micro-label">SECTION B · TIER 3 LABEL-NOISE ROBUSTNESS ANALYSIS</span>
+              <h3 id="sec-heading-b">B. Label-Noise Robustness (0%, 10%, 20%, 40% Label Corruption)</h3>
+            </div>
+            <div class="seg-group" id="noise-metric-selector" role="group" aria-label="Select label-noise metric">
+              <button type="button" class="seg-btn active" data-noise-metric="eer_pct" aria-pressed="true">EER (%)</button>
+              <button type="button" class="seg-btn" data-noise-metric="mindcf_05" aria-pressed="false">minDCF (P=0.05)</button>
+            </div>
+          </div>
+          <div class="noise-callout" role="note">
+            <strong>Design Principle:</strong> S0 degrades more slowly than S1 as label noise increases because AdaptiveDrop is designed to identify and mitigate unreliable training labels.
+          </div>
+          <div class="noise-chart-wrap">
+            <div class="chart chart-tall" id="chart-label-noise"></div>
+          </div>
+          <div id="noise-table-wrap"></div>
+        </div>
+      </section>
+
+      <!-- SECTION C: SKA-HNN vs ECAPA-TDNN Comparison -->
+      <section class="dash-section" id="sec-ecapa-comparison" aria-labelledby="sec-heading-c">
+        <div class="card corner-card dash-large-card" id="ecapa-card">
+          <div class="dash-section-head">
+            <div>
+              <span class="micro-label">SECTION C · TIER 0 BASELINE VS TIER 1 PROPOSED BACKBONE</span>
+              <h3 id="sec-heading-c">C. SKA-HNN vs ECAPA-TDNN Architecture Comparison</h3>
+            </div>
+            <div class="seg-group" id="ecapa-metric-selector" role="group" aria-label="Select architecture comparison metric">
+              <button type="button" class="seg-btn active" data-ecapa-metric="eer_pct" aria-pressed="true">EER (%)</button>
+              <button type="button" class="seg-btn" data-ecapa-metric="mindcf_05" aria-pressed="false">minDCF (P=0.05)</button>
+            </div>
+          </div>
+          <div class="ecapa-split-grid">
+            <div id="ecapa-table-wrap"></div>
+            <div class="card corner-card chart-card">
+              <h4 id="ecapa-chart-title">Architecture Comparison on <code>dev-clean</code></h4>
+              <div class="chart chart-med" id="chart-ecapa-comparison"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION D: Ablation Study (S0, S1, S2, S3, S5, S6) -->
+      <section class="dash-section" id="sec-ablation-study" aria-labelledby="sec-heading-d">
+        <div class="card corner-card dash-large-card" id="ablation-card">
+          <div class="dash-section-head">
+            <div>
+              <span class="micro-label">SECTION D · TIER 2 COMPONENT ABLATION STUDY (S4 DROPPED &amp; EXCLUDED)</span>
+              <h3 id="sec-heading-d">D. Architectural &amp; Loss Ablation Study (S0, S1, S2, S3, S5, S6)</h3>
+            </div>
+            <div class="seg-group" id="ablation-metric-selector" role="group" aria-label="Select ablation study metric">
+              <button type="button" class="seg-btn active" data-ablation-metric="eer_pct" aria-pressed="true">EER (%)</button>
+              <button type="button" class="seg-btn" data-ablation-metric="mindcf_05" aria-pressed="false">minDCF (P=0.05)</button>
+            </div>
+          </div>
+          <div id="ablation-table-wrap"></div>
+          <div class="card corner-card chart-card ablation-chart-card">
+            <h4 id="ablation-chart-title">Ablation Progression across S0, S1, S2, S3, S5, S6</h4>
+            <div class="chart chart-med" id="chart-ablation-study"></div>
+          </div>
+        </div>
+      </section>
     </section>
 
     <!-- ================= 4. MODELS ================= -->

@@ -1,0 +1,994 @@
+{
+  "schema_version": "1.0",
+  "status": "projected",
+  "generator_script": "scripts/generate_placeholders.py",
+  "paper_reference_file": "results/placeholders/paper_reference.json",
+  "policy_note": "All values in this file are illustrative projections computed deterministically via projected = our_measured_anchor * (paper_value_target / paper_value_anchor) from Alam et al. (IJCNN 2025). They are physically separated from measured results, never merged into headline statistics, and automatically suppressed per point/cell whenever a measured result exists.",
+  "measured_anchors_snapshot": {
+    "completed_seeds": [
+      42,
+      43
+    ],
+    "num_completed_seeds": 2,
+    "s0_eer_mean_pct": 11.915,
+    "s0_mindcf_mean": 0.4492,
+    "s1_eer_mean_pct": 11.71,
+    "s1_mindcf_mean": 0.4617,
+    "per_seed": {
+      "42": {
+        "seed": 42,
+        "pair_completed": true,
+        "s0_completed": true,
+        "s1_completed": true,
+        "s0_best_dev_eer_pct": 12.06,
+        "s0_best_dev_mindcf_05": 0.4594,
+        "s1_best_dev_eer_pct": 11.71,
+        "s1_best_dev_mindcf_05": 0.4506
+      },
+      "43": {
+        "seed": 43,
+        "pair_completed": true,
+        "s0_completed": true,
+        "s1_completed": true,
+        "s0_best_dev_eer_pct": 11.77,
+        "s0_best_dev_mindcf_05": 0.439,
+        "s1_best_dev_eer_pct": 11.71,
+        "s1_best_dev_mindcf_05": 0.4729
+      },
+      "44": {
+        "seed": 44,
+        "pair_completed": false,
+        "s0_completed": false,
+        "s1_completed": false,
+        "s0_best_dev_eer_pct": null,
+        "s0_best_dev_mindcf_05": null,
+        "s1_best_dev_eer_pct": null,
+        "s1_best_dev_mindcf_05": null
+      }
+    }
+  },
+  "label_noise": {
+    "10": {
+      "noise_pct": 10,
+      "s0": {
+        "eer_pct": {
+          "value": 17.74,
+          "unit": "%",
+          "metric": "dev_eer_pct",
+          "status": "projected",
+          "ratio": 1.4885,
+          "formula": "11.9150 * (0.9675 / 0.65) = 11.9150 * 1.4885 = 17.74",
+          "inputs": {
+            "our_anchor": {
+              "name": "S0 clean dev-clean EER seed mean",
+              "value": 11.915,
+              "dataset": "LibriSpeech dev-clean (6,200 cross-chapter trials)",
+              "completed_seeds": [
+                42,
+                43
+              ]
+            },
+            "paper_target": {
+              "name": "Paper Table II->VI scaled S0 at 10% label noise [HYPOTHESIS]",
+              "value": 0.9675,
+              "reference": "Table II (p. 5) & Table VI (p. 8)",
+              "dataset": "VoxCeleb1_O"
+            },
+            "paper_anchor": {
+              "name": "Paper Table II S0 (0% clean, VoxCeleb1_O)",
+              "value": 0.65,
+              "reference": "Table II (p. 5) & Table VI (p. 8)",
+              "dataset": "VoxCeleb1_O"
+            }
+          },
+          "caveat": "[HYPOTHESIS] Illustrative projection scaled between Paper Table II (0% clean, p. 5) and Paper Table VI (CAMSAT noisy pseudo-label condition, p. 8) across 10%, 20%, and 40% noise levels."
+        },
+        "mindcf_05": {
+          "value": 0.6895,
+          "unit": "minDCF (P=0.05)",
+          "metric": "dev_mindcf_05",
+          "status": "projected",
+          "ratio": 1.5349,
+          "formula": "0.4492 * (0.066 / 0.043) = 0.4492 * 1.5349 = 0.6895",
+          "inputs": {
+            "our_anchor": {
+              "name": "S0 clean dev-clean minDCF seed mean",
+              "value": 0.4492,
+              "dataset": "LibriSpeech dev-clean (6,200 cross-chapter trials)",
+              "completed_seeds": [
+                42,
+                43
+              ]
+            },
+            "paper_target": {
+              "name": "Paper Table II->VI scaled S0 at 10% label noise [HYPOTHESIS]",
+              "value": 0.066,
+              "reference": "Table II (p. 5) & Table VI (p. 8)",
+              "dataset": "VoxCeleb1_O"
+            },
+            "paper_anchor": {
+              "name": "Paper Table II S0 (0% clean, VoxCeleb1_O)",
+              "value": 0.043,
+              "reference": "Table II (p. 5) & Table VI (p. 8)",
+              "dataset": "VoxCeleb1_O"
+            }
+          },
+          "caveat": "[HYPOTHESIS] Illustrative projection scaled between Paper Table II (0% clean, p. 5) and Paper Table VI (CAMSAT noisy pseudo-label condition, p. 8) across 10%, 20%, and 40% noise levels."
+        }
+      },
+      "s1": {
+        "eer_pct": {
+          "value": 18.05,
+          "unit": "%",
+          "metric": "dev_eer_pct",
+          "status": "projected",
+          "ratio": 1.5418,
+          "formula": "11.7100 * (1.033 / 0.67) = 11.7100 * 1.5418 = 18.05",
+          "inputs": {
+            "our_anchor": {
+              "name": "S1 clean dev-clean EER seed mean",
+              "value": 11.71,
+              "dataset": "LibriSpeech dev-clean (6,200 cross-chapter trials)",
+              "completed_seeds": [
+                42,
+                43
+              ]
+            },
+            "paper_target": {
+              "name": "Paper Table II->VI scaled S1 at 10% label noise [HYPOTHESIS]",
+              "value": 1.033,
+              "reference": "Table II (p. 5) & Table VI (p. 8)",
+              "dataset": "VoxCeleb1_O"
+            },
+            "paper_anchor": {
+              "name": "Paper Table II S1 (0% clean, VoxCeleb1_O)",
+              "value": 0.67,
+              "reference": "Table II (p. 5) & Table VI (p. 8)",
+              "dataset": "VoxCeleb1_O"
+            }
+          },
+          "caveat": "[HYPOTHESIS] Illustrative projection scaled between Paper Table II (0% clean, p. 5) and Paper Table VI (CAMSAT noisy pseudo-label condition, p. 8) across 10%, 20%, and 40% noise levels."
+        },
+        "mindcf_05": {
+          "value": 0.7343,
+          "unit": "minDCF (P=0.05)",
+          "metric": "dev_mindcf_05",
+          "status": "projected",
+          "ratio": 1.5905,
+          "formula": "0.4617 * (0.0703 / 0.0442) = 0.4617 * 1.5905 = 0.7343",
+          "inputs": {
+            "our_anchor": {
+              "name": "S1 clean dev-clean minDCF seed mean",
+              "value": 0.4617,
+              "dataset": "LibriSpeech dev-clean (6,200 cross-chapter trials)",
+              "completed_seeds": [
+                42,
+                43
+              ]
+            },
+            "paper_target": {
+              "name": "Paper Table II->VI scaled S1 at 10% label noise [HYPOTHESIS]",
+              "value": 0.0703,
+              "reference": "Table II (p. 5) & Table VI (p. 8)",
+              "dataset": "VoxCeleb1_O"
+            },
+            "paper_anchor": {
+              "name": "Paper Table II S1 (0% clean, VoxCeleb1_O)",
+              "value": 0.0442,
+              "reference": "Table II (p. 5) & Table VI (p. 8)",
+              "dataset": "VoxCeleb1_O"
+            }
+          },
+          "caveat": "[HYPOTHESIS] Illustrative projection scaled between Paper Table II (0% clean, p. 5) and Paper Table VI (CAMSAT noisy pseudo-label condition, p. 8) across 10%, 20%, and 40% noise levels."
+        }
+      }
+    },
+    "20": {
+      "noise_pct": 20,
+      "s0": {
+        "eer_pct": {
+          "value": 23.56,
+          "unit": "%",
+          "metric": "dev_eer_pct",
+          "status": "projected",
+          "ratio": 1.9769,
+          "formula": "11.9150 * (1.285 / 0.65) = 11.9150 * 1.9769 = 23.56",
+          "inputs": {
+            "our_anchor": {
+              "name": "S0 clean dev-clean EER seed mean",
+              "value": 11.915,
+              "dataset": "LibriSpeech dev-clean (6,200 cross-chapter trials)",
+              "completed_seeds": [
+                42,
+                43
+              ]
+            },
+            "paper_target": {
+              "name": "Paper Table II->VI scaled S0 at 20% label noise [HYPOTHESIS]",
+              "value": 1.285,
+              "reference": "Table II (p. 5) & Table VI (p. 8)",
+              "dataset": "VoxCeleb1_O"
+            },
+            "paper_anchor": {
+              "name": "Paper Table II S0 (0% clean, VoxCeleb1_O)",
+              "value": 0.65,
+              "reference": "Table II (p. 5) & Table VI (p. 8)",
+              "dataset": "VoxCeleb1_O"
+            }
+          },
+          "caveat": "[HYPOTHESIS] Illustrative projection scaled between Paper Table II (0% clean, p. 5) and Paper Table VI (CAMSAT noisy pseudo-label condition, p. 8) across 10%, 20%, and 40% noise levels."
+        },
+        "mindcf_05": {
+          "value": 0.9308,
+          "unit": "minDCF (P=0.05)",
+          "metric": "dev_mindcf_05",
+          "status": "projected",
+          "ratio": 2.0721,
+          "formula": "0.4492 * (0.0891 / 0.043) = 0.4492 * 2.0721 = 0.9308",
+          "inputs": {
+            "our_anchor": {
+              "name": "S0 clean dev-clean minDCF seed mean",
+              "value": 0.4492,
+              "dataset": "LibriSpeech dev-clean (6,200 cross-chapter trials)",
+              "completed_seeds": [
+                42,
+                43
+              ]
+            },
+            "paper_target": {
+              "name": "Paper Table II->VI scaled S0 at 20% label noise [HYPOTHESIS]",
+              "value": 0.0891,
+              "reference": "Table II (p. 5) & Table VI (p. 8)",
+              "dataset": "VoxCeleb1_O"
+            },
+            "paper_anchor": {
+              "name": "Paper Table II S0 (0% clean, VoxCeleb1_O)",
+              "value": 0.043,
+              "reference": "Table II (p. 5) & Table VI (p. 8)",
+              "dataset": "VoxCeleb1_O"
+            }
+          },
+          "caveat": "[HYPOTHESIS] Illustrative projection scaled between Paper Table II (0% clean, p. 5) and Paper Table VI (CAMSAT noisy pseudo-label condition, p. 8) across 10%, 20%, and 40% noise levels."
+        }
+      },
+      "s1": {
+        "eer_pct": {
+          "value": 24.4,
+          "unit": "%",
+          "metric": "dev_eer_pct",
+          "status": "projected",
+          "ratio": 2.0836,
+          "formula": "11.7100 * (1.396 / 0.67) = 11.7100 * 2.0836 = 24.40",
+          "inputs": {
+            "our_anchor": {
+              "name": "S1 clean dev-clean EER seed mean",
+              "value": 11.71,
+              "dataset": "LibriSpeech dev-clean (6,200 cross-chapter trials)",
+              "completed_seeds": [
+                42,
+                43
+              ]
+            },
+            "paper_target": {
+              "name": "Paper Table II->VI scaled S1 at 20% label noise [HYPOTHESIS]",
+              "value": 1.396,
+              "reference": "Table II (p. 5) & Table VI (p. 8)",
+              "dataset": "VoxCeleb1_O"
+            },
+            "paper_anchor": {
+              "name": "Paper Table II S1 (0% clean, VoxCeleb1_O)",
+              "value": 0.67,
+              "reference": "Table II (p. 5) & Table VI (p. 8)",
+              "dataset": "VoxCeleb1_O"
+            }
+          },
+          "caveat": "[HYPOTHESIS] Illustrative projection scaled between Paper Table II (0% clean, p. 5) and Paper Table VI (CAMSAT noisy pseudo-label condition, p. 8) across 10%, 20%, and 40% noise levels."
+        },
+        "mindcf_05": {
+          "value": 1.0059,
+          "unit": "minDCF (P=0.05)",
+          "metric": "dev_mindcf_05",
+          "status": "projected",
+          "ratio": 2.1787,
+          "formula": "0.4617 * (0.0963 / 0.0442) = 0.4617 * 2.1787 = 1.0059",
+          "inputs": {
+            "our_anchor": {
+              "name": "S1 clean dev-clean minDCF seed mean",
+              "value": 0.4617,
+              "dataset": "LibriSpeech dev-clean (6,200 cross-chapter trials)",
+              "completed_seeds": [
+                42,
+                43
+              ]
+            },
+            "paper_target": {
+              "name": "Paper Table II->VI scaled S1 at 20% label noise [HYPOTHESIS]",
+              "value": 0.0963,
+              "reference": "Table II (p. 5) & Table VI (p. 8)",
+              "dataset": "VoxCeleb1_O"
+            },
+            "paper_anchor": {
+              "name": "Paper Table II S1 (0% clean, VoxCeleb1_O)",
+              "value": 0.0442,
+              "reference": "Table II (p. 5) & Table VI (p. 8)",
+              "dataset": "VoxCeleb1_O"
+            }
+          },
+          "caveat": "[HYPOTHESIS] Illustrative projection scaled between Paper Table II (0% clean, p. 5) and Paper Table VI (CAMSAT noisy pseudo-label condition, p. 8) across 10%, 20%, and 40% noise levels."
+        }
+      }
+    },
+    "40": {
+      "noise_pct": 40,
+      "s0": {
+        "eer_pct": {
+          "value": 35.2,
+          "unit": "%",
+          "metric": "dev_eer_pct",
+          "status": "projected",
+          "ratio": 2.9538,
+          "formula": "11.9150 * (1.92 / 0.65) = 11.9150 * 2.9538 = 35.20",
+          "inputs": {
+            "our_anchor": {
+              "name": "S0 clean dev-clean EER seed mean",
+              "value": 11.915,
+              "dataset": "LibriSpeech dev-clean (6,200 cross-chapter trials)",
+              "completed_seeds": [
+                42,
+                43
+              ]
+            },
+            "paper_target": {
+              "name": "Paper Table II->VI scaled S0 at 40% label noise [HYPOTHESIS]",
+              "value": 1.92,
+              "reference": "Table II (p. 5) & Table VI (p. 8)",
+              "dataset": "VoxCeleb1_O"
+            },
+            "paper_anchor": {
+              "name": "Paper Table II S0 (0% clean, VoxCeleb1_O)",
+              "value": 0.65,
+              "reference": "Table II (p. 5) & Table VI (p. 8)",
+              "dataset": "VoxCeleb1_O"
+            }
+          },
+          "caveat": "[HYPOTHESIS] Illustrative projection scaled between Paper Table II (0% clean, p. 5) and Paper Table VI (CAMSAT noisy pseudo-label condition, p. 8) across 10%, 20%, and 40% noise levels."
+        },
+        "mindcf_05": {
+          "value": 1.4124,
+          "unit": "minDCF (P=0.05)",
+          "metric": "dev_mindcf_05",
+          "status": "projected",
+          "ratio": 3.1442,
+          "formula": "0.4492 * (0.1352 / 0.043) = 0.4492 * 3.1442 = 1.4124",
+          "inputs": {
+            "our_anchor": {
+              "name": "S0 clean dev-clean minDCF seed mean",
+              "value": 0.4492,
+              "dataset": "LibriSpeech dev-clean (6,200 cross-chapter trials)",
+              "completed_seeds": [
+                42,
+                43
+              ]
+            },
+            "paper_target": {
+              "name": "Paper Table II->VI scaled S0 at 40% label noise [HYPOTHESIS]",
+              "value": 0.1352,
+              "reference": "Table II (p. 5) & Table VI (p. 8)",
+              "dataset": "VoxCeleb1_O"
+            },
+            "paper_anchor": {
+              "name": "Paper Table II S0 (0% clean, VoxCeleb1_O)",
+              "value": 0.043,
+              "reference": "Table II (p. 5) & Table VI (p. 8)",
+              "dataset": "VoxCeleb1_O"
+            }
+          },
+          "caveat": "[HYPOTHESIS] Illustrative projection scaled between Paper Table II (0% clean, p. 5) and Paper Table VI (CAMSAT noisy pseudo-label condition, p. 8) across 10%, 20%, and 40% noise levels."
+        }
+      },
+      "s1": {
+        "eer_pct": {
+          "value": 37.09,
+          "unit": "%",
+          "metric": "dev_eer_pct",
+          "status": "projected",
+          "ratio": 3.1672,
+          "formula": "11.7100 * (2.122 / 0.67) = 11.7100 * 3.1672 = 37.09",
+          "inputs": {
+            "our_anchor": {
+              "name": "S1 clean dev-clean EER seed mean",
+              "value": 11.71,
+              "dataset": "LibriSpeech dev-clean (6,200 cross-chapter trials)",
+              "completed_seeds": [
+                42,
+                43
+              ]
+            },
+            "paper_target": {
+              "name": "Paper Table II->VI scaled S1 at 40% label noise [HYPOTHESIS]",
+              "value": 2.122,
+              "reference": "Table II (p. 5) & Table VI (p. 8)",
+              "dataset": "VoxCeleb1_O"
+            },
+            "paper_anchor": {
+              "name": "Paper Table II S1 (0% clean, VoxCeleb1_O)",
+              "value": 0.67,
+              "reference": "Table II (p. 5) & Table VI (p. 8)",
+              "dataset": "VoxCeleb1_O"
+            }
+          },
+          "caveat": "[HYPOTHESIS] Illustrative projection scaled between Paper Table II (0% clean, p. 5) and Paper Table VI (CAMSAT noisy pseudo-label condition, p. 8) across 10%, 20%, and 40% noise levels."
+        },
+        "mindcf_05": {
+          "value": 1.5512,
+          "unit": "minDCF (P=0.05)",
+          "metric": "dev_mindcf_05",
+          "status": "projected",
+          "ratio": 3.3597,
+          "formula": "0.4617 * (0.1485 / 0.0442) = 0.4617 * 3.3597 = 1.5512",
+          "inputs": {
+            "our_anchor": {
+              "name": "S1 clean dev-clean minDCF seed mean",
+              "value": 0.4617,
+              "dataset": "LibriSpeech dev-clean (6,200 cross-chapter trials)",
+              "completed_seeds": [
+                42,
+                43
+              ]
+            },
+            "paper_target": {
+              "name": "Paper Table II->VI scaled S1 at 40% label noise [HYPOTHESIS]",
+              "value": 0.1485,
+              "reference": "Table II (p. 5) & Table VI (p. 8)",
+              "dataset": "VoxCeleb1_O"
+            },
+            "paper_anchor": {
+              "name": "Paper Table II S1 (0% clean, VoxCeleb1_O)",
+              "value": 0.0442,
+              "reference": "Table II (p. 5) & Table VI (p. 8)",
+              "dataset": "VoxCeleb1_O"
+            }
+          },
+          "caveat": "[HYPOTHESIS] Illustrative projection scaled between Paper Table II (0% clean, p. 5) and Paper Table VI (CAMSAT noisy pseudo-label condition, p. 8) across 10%, 20%, and 40% noise levels."
+        }
+      }
+    }
+  },
+  "ssl_camsat_reference": {
+    "description": "Self-supervised speaker verification using noisy pseudo-labels from CAMSAT K-Means clustering (K=5,994 clusters on unlabeled VoxCeleb2 dev)",
+    "reference": "Table VI, page 8",
+    "s0": {
+      "eer_pct": {
+        "value": 35.2,
+        "unit": "%",
+        "metric": "dev_eer_pct",
+        "status": "projected",
+        "ratio": 2.9538,
+        "formula": "11.9150 * (1.92 / 0.65) = 11.9150 * 2.9538 = 35.20",
+        "inputs": {
+          "our_anchor": {
+            "name": "S0 clean dev-clean EER seed mean",
+            "value": 11.915,
+            "dataset": "LibriSpeech dev-clean (6,200 cross-chapter trials)",
+            "completed_seeds": [
+              42,
+              43
+            ]
+          },
+          "paper_target": {
+            "name": "Paper Table VI IAAMSoftmax (S0, CAMSAT SSL pseudo-labels)",
+            "value": 1.92,
+            "reference": "Table VI, page 8 vs Table II, page 5",
+            "dataset": "VoxCeleb1_O"
+          },
+          "paper_anchor": {
+            "name": "Paper Table II S0 (supervised clean)",
+            "value": 0.65,
+            "reference": "Table VI, page 8 vs Table II, page 5",
+            "dataset": "VoxCeleb1_O"
+          }
+        },
+        "caveat": "Illustrative projection from Paper Table VI (page 8, VoxCeleb1_O with CAMSAT 5,994-cluster self-supervised pseudo-labels on VoxCeleb2 dev) relative to Paper Table II (page 5, supervised clean). Corpus and clustering protocol differ from our LibriSpeech train-clean-100 setup."
+      },
+      "mindcf_05": {
+        "value": 1.4124,
+        "unit": "minDCF (P=0.05)",
+        "metric": "dev_mindcf_05",
+        "status": "projected",
+        "ratio": 3.1442,
+        "formula": "0.4492 * (0.1352 / 0.043) = 0.4492 * 3.1442 = 1.4124",
+        "inputs": {
+          "our_anchor": {
+            "name": "S0 clean dev-clean minDCF seed mean",
+            "value": 0.4492,
+            "dataset": "LibriSpeech dev-clean (6,200 cross-chapter trials)",
+            "completed_seeds": [
+              42,
+              43
+            ]
+          },
+          "paper_target": {
+            "name": "Paper Table VI IAAMSoftmax (S0, CAMSAT SSL pseudo-labels)",
+            "value": 0.1352,
+            "reference": "Table VI, page 8 vs Table II, page 5",
+            "dataset": "VoxCeleb1_O"
+          },
+          "paper_anchor": {
+            "name": "Paper Table II S0 (supervised clean)",
+            "value": 0.043,
+            "reference": "Table VI, page 8 vs Table II, page 5",
+            "dataset": "VoxCeleb1_O"
+          }
+        },
+        "caveat": "Illustrative projection from Paper Table VI (page 8, VoxCeleb1_O with CAMSAT 5,994-cluster self-supervised pseudo-labels on VoxCeleb2 dev) relative to Paper Table II (page 5, supervised clean). Corpus and clustering protocol differ from our LibriSpeech train-clean-100 setup."
+      }
+    },
+    "s1": {
+      "eer_pct": {
+        "value": 37.09,
+        "unit": "%",
+        "metric": "dev_eer_pct",
+        "status": "projected",
+        "ratio": 3.1672,
+        "formula": "11.7100 * (2.122 / 0.67) = 11.7100 * 3.1672 = 37.09",
+        "inputs": {
+          "our_anchor": {
+            "name": "S1 clean dev-clean EER seed mean",
+            "value": 11.71,
+            "dataset": "LibriSpeech dev-clean (6,200 cross-chapter trials)",
+            "completed_seeds": [
+              42,
+              43
+            ]
+          },
+          "paper_target": {
+            "name": "Paper Table VI AAMSoftmax (S1, CAMSAT SSL pseudo-labels)",
+            "value": 2.122,
+            "reference": "Table VI, page 8 vs Table II, page 5",
+            "dataset": "VoxCeleb1_O"
+          },
+          "paper_anchor": {
+            "name": "Paper Table II S1 (supervised clean)",
+            "value": 0.67,
+            "reference": "Table VI, page 8 vs Table II, page 5",
+            "dataset": "VoxCeleb1_O"
+          }
+        },
+        "caveat": "Illustrative projection from Paper Table VI (page 8, VoxCeleb1_O with CAMSAT 5,994-cluster self-supervised pseudo-labels on VoxCeleb2 dev) relative to Paper Table II (page 5, supervised clean). Corpus and clustering protocol differ from our LibriSpeech train-clean-100 setup."
+      },
+      "mindcf_05": {
+        "value": 1.5512,
+        "unit": "minDCF (P=0.05)",
+        "metric": "dev_mindcf_05",
+        "status": "projected",
+        "ratio": 3.3597,
+        "formula": "0.4617 * (0.1485 / 0.0442) = 0.4617 * 3.3597 = 1.5512",
+        "inputs": {
+          "our_anchor": {
+            "name": "S1 clean dev-clean minDCF seed mean",
+            "value": 0.4617,
+            "dataset": "LibriSpeech dev-clean (6,200 cross-chapter trials)",
+            "completed_seeds": [
+              42,
+              43
+            ]
+          },
+          "paper_target": {
+            "name": "Paper Table VI AAMSoftmax (S1, CAMSAT SSL pseudo-labels)",
+            "value": 0.1485,
+            "reference": "Table VI, page 8 vs Table II, page 5",
+            "dataset": "VoxCeleb1_O"
+          },
+          "paper_anchor": {
+            "name": "Paper Table II S1 (supervised clean)",
+            "value": 0.0442,
+            "reference": "Table VI, page 8 vs Table II, page 5",
+            "dataset": "VoxCeleb1_O"
+          }
+        },
+        "caveat": "Illustrative projection from Paper Table VI (page 8, VoxCeleb1_O with CAMSAT 5,994-cluster self-supervised pseudo-labels on VoxCeleb2 dev) relative to Paper Table II (page 5, supervised clean). Corpus and clustering protocol differ from our LibriSpeech train-clean-100 setup."
+      }
+    }
+  },
+  "ecapa_comparison": {
+    "model_name": "ECAPA-TDNN (Parameter-Matched Target)",
+    "paper_parameter_count_million": null,
+    "paper_parameter_count_note": "Paper Tables III and V do not report the ECAPA-TDNN parameter count.",
+    "target_parameter_count": 4167700,
+    "measured_matched_parameter_count": 4123210,
+    "eer_pct": {
+      "value": 18.33,
+      "unit": "%",
+      "metric": "dev_eer_pct",
+      "status": "projected",
+      "ratio": 1.5385,
+      "formula": "11.9150 * (1.0 / 0.65) = 11.9150 * 1.5385 = 18.33",
+      "inputs": {
+        "our_anchor": {
+          "name": "S0 clean dev-clean EER seed mean",
+          "value": 11.915,
+          "dataset": "LibriSpeech dev-clean (6,200 cross-chapter trials)",
+          "completed_seeds": [
+            42,
+            43
+          ]
+        },
+        "paper_target": {
+          "name": "Paper Table V ECAPA-TDNN (VoxCeleb1_O, CS)",
+          "value": 1.0,
+          "reference": "Table V, page 7",
+          "dataset": "VoxCeleb1_O"
+        },
+        "paper_anchor": {
+          "name": "Paper Table V Proposed S0 (VoxCeleb1_O, CS)",
+          "value": 0.65,
+          "reference": "Table V, page 7",
+          "dataset": "VoxCeleb1_O"
+        }
+      },
+      "caveat": "Illustrative projection derived from Paper Table V (page 7, VoxCeleb1_O, Cosine scoring), where ECAPA-TDNN reports 1.00% EER vs Proposed S0 0.65% EER (ratio 1.5385). Note: Paper trained on VoxCeleb2 dev (5,994 speakers) with unscaled 30.91M SKA-HNN and does not report ECAPA-TDNN parameter count; our reproduction uses 251 speakers on LibriSpeech train-clean-100 with parameter-matched models (~4.17M)."
+    },
+    "mindcf_05": {
+      "value": 0.6769,
+      "unit": "minDCF (P=0.05)",
+      "metric": "dev_mindcf_05",
+      "status": "projected",
+      "ratio": 1.507,
+      "formula": "0.4492 * (0.324 / 0.215) = 0.4492 * 1.5070 = 0.6769",
+      "inputs": {
+        "our_anchor": {
+          "name": "S0 clean dev-clean minDCF seed mean",
+          "value": 0.4492,
+          "dataset": "LibriSpeech dev-clean (6,200 cross-chapter trials)",
+          "completed_seeds": [
+            42,
+            43
+          ]
+        },
+        "paper_target": {
+          "name": "Paper Table III ECAPA-TDNN (VoxCeleb1_B bilingual, Cosine)",
+          "value": 0.324,
+          "reference": "Table III, page 6 (Table V omits minDCF)",
+          "dataset": "VoxCeleb1_B (bilingual language-mismatch)"
+        },
+        "paper_anchor": {
+          "name": "Paper Table III Proposed S0 (VoxCeleb1_B bilingual, Cosine)",
+          "value": 0.215,
+          "reference": "Table III, page 6 (Table V omits minDCF)",
+          "dataset": "VoxCeleb1_B (bilingual language-mismatch)"
+        }
+      },
+      "caveat": "Illustrative projection derived from Paper Table III (page 6, VoxCeleb1_B bilingual language-mismatch set), where ECAPA-TDNN reports 0.324 minDCF vs Proposed S0 0.215 minDCF (ratio 1.5070). Caveat: Paper Table V (VoxCeleb1_O) reports EER only and omits minDCF; therefore this minDCF ratio comes from the bilingual Table III evaluation and is a rough cross-condition illustration only."
+    }
+  },
+  "ablations": {
+    "S2": {
+      "switch": "S2",
+      "paper_parameters_million": 29.16,
+      "config_to_paper_mapping": {
+        "config_source": "src/models/ska_hnn/ska_hnn.py (build_ska_hnn switch='S2')",
+        "our_components": {
+          "frontend": "ska_2dcnn (2D-CNN + fwSKA + cwSKA)",
+          "use_ska": true,
+          "use_mlfc": true,
+          "use_ls_context": false,
+          "loss": "aam_softmax (AdaptiveDrop disabled)"
+        },
+        "paper_row": "Table II row S2 (page 5)",
+        "mapping_verification": "Exact match: our switch='S2' sets use_ls_context=False in MLASP while keeping frontend='ska_2dcnn', use_mlfc=True, and AAMSoftmax; Paper Table II S2 removes local statistics context in MLASP under AAMSoftmax."
+      },
+      "eer_pct": {
+        "value": 12.58,
+        "unit": "%",
+        "metric": "dev_eer_pct",
+        "status": "projected",
+        "ratio": 1.0746,
+        "formula": "11.7100 * (0.72 / 0.67) = 11.7100 * 1.0746 = 12.58",
+        "inputs": {
+          "our_anchor": {
+            "name": "S1 clean dev-clean EER seed mean",
+            "value": 11.71,
+            "dataset": "LibriSpeech dev-clean (6,200 cross-chapter trials)",
+            "completed_seeds": [
+              42,
+              43
+            ]
+          },
+          "paper_target": {
+            "name": "Paper Table II S2 (VoxCeleb1_O)",
+            "value": 0.72,
+            "reference": "Table II, page 5",
+            "dataset": "VoxCeleb1_O"
+          },
+          "paper_anchor": {
+            "name": "Paper Table II S1 (VoxCeleb1_O)",
+            "value": 0.67,
+            "reference": "Table II, page 5",
+            "dataset": "VoxCeleb1_O"
+          }
+        },
+        "caveat": "Illustrative projection for S2 derived from Paper Table II (page 5, VoxCeleb1_O, Cosine scoring) relative to S1 (AAMSoftmax backbone baseline). Paper trained unscaled 30.91M model on VoxCeleb2 dev (5,994 speakers); our reproduction scales width to C=32, C1=256 on LibriSpeech train-clean-100 (251 speakers).",
+        "s0_anchored_alternative_eer_pct": 13.2
+      },
+      "mindcf_05": {
+        "value": 0.4941,
+        "unit": "minDCF (P=0.05)",
+        "metric": "dev_mindcf_05",
+        "status": "projected",
+        "ratio": 1.0701,
+        "formula": "0.4617 * (0.0473 / 0.0442) = 0.4617 * 1.0701 = 0.4941",
+        "inputs": {
+          "our_anchor": {
+            "name": "S1 clean dev-clean minDCF seed mean",
+            "value": 0.4617,
+            "dataset": "LibriSpeech dev-clean (6,200 cross-chapter trials)",
+            "completed_seeds": [
+              42,
+              43
+            ]
+          },
+          "paper_target": {
+            "name": "Paper Table II S2 (VoxCeleb1_O)",
+            "value": 0.0473,
+            "reference": "Table II, page 5",
+            "dataset": "VoxCeleb1_O"
+          },
+          "paper_anchor": {
+            "name": "Paper Table II S1 (VoxCeleb1_O)",
+            "value": 0.0442,
+            "reference": "Table II, page 5",
+            "dataset": "VoxCeleb1_O"
+          }
+        },
+        "caveat": "Illustrative projection for S2 derived from Paper Table II (page 5, VoxCeleb1_O, Cosine scoring) relative to S1 (AAMSoftmax backbone baseline). Paper trained unscaled 30.91M model on VoxCeleb2 dev (5,994 speakers); our reproduction scales width to C=32, C1=256 on LibriSpeech train-clean-100 (251 speakers).",
+        "s0_anchored_alternative_mindcf_05": 0.4941
+      }
+    },
+    "S3": {
+      "switch": "S3",
+      "paper_parameters_million": 26.77,
+      "config_to_paper_mapping": {
+        "config_source": "src/models/ska_hnn/ska_hnn.py (build_ska_hnn switch='S3')",
+        "our_components": {
+          "frontend": "ska_2dcnn (2D-CNN + fwSKA + cwSKA)",
+          "use_ska": true,
+          "use_mlfc": false,
+          "use_ls_context": true,
+          "loss": "aam_softmax (AdaptiveDrop disabled)"
+        },
+        "paper_row": "Table II row S3 (page 5)",
+        "mapping_verification": "Exact match: our switch='S3' sets use_mlfc=False (passing only X_t from Fully-TDNN to MLASP) while keeping frontend='ska_2dcnn', use_ls_context=True, and AAMSoftmax; Paper Table II S3 removes multi-level feature concatenation (X_i = X_t)."
+      },
+      "eer_pct": {
+        "value": 14.33,
+        "unit": "%",
+        "metric": "dev_eer_pct",
+        "status": "projected",
+        "ratio": 1.2239,
+        "formula": "11.7100 * (0.82 / 0.67) = 11.7100 * 1.2239 = 14.33",
+        "inputs": {
+          "our_anchor": {
+            "name": "S1 clean dev-clean EER seed mean",
+            "value": 11.71,
+            "dataset": "LibriSpeech dev-clean (6,200 cross-chapter trials)",
+            "completed_seeds": [
+              42,
+              43
+            ]
+          },
+          "paper_target": {
+            "name": "Paper Table II S3 (VoxCeleb1_O)",
+            "value": 0.82,
+            "reference": "Table II, page 5",
+            "dataset": "VoxCeleb1_O"
+          },
+          "paper_anchor": {
+            "name": "Paper Table II S1 (VoxCeleb1_O)",
+            "value": 0.67,
+            "reference": "Table II, page 5",
+            "dataset": "VoxCeleb1_O"
+          }
+        },
+        "caveat": "Illustrative projection for S3 derived from Paper Table II (page 5, VoxCeleb1_O, Cosine scoring) relative to S1 (AAMSoftmax backbone baseline). Paper trained unscaled 30.91M model on VoxCeleb2 dev (5,994 speakers); our reproduction scales width to C=32, C1=256 on LibriSpeech train-clean-100 (251 speakers).",
+        "s0_anchored_alternative_eer_pct": 15.03
+      },
+      "mindcf_05": {
+        "value": 0.5672,
+        "unit": "minDCF (P=0.05)",
+        "metric": "dev_mindcf_05",
+        "status": "projected",
+        "ratio": 1.2285,
+        "formula": "0.4617 * (0.0543 / 0.0442) = 0.4617 * 1.2285 = 0.5672",
+        "inputs": {
+          "our_anchor": {
+            "name": "S1 clean dev-clean minDCF seed mean",
+            "value": 0.4617,
+            "dataset": "LibriSpeech dev-clean (6,200 cross-chapter trials)",
+            "completed_seeds": [
+              42,
+              43
+            ]
+          },
+          "paper_target": {
+            "name": "Paper Table II S3 (VoxCeleb1_O)",
+            "value": 0.0543,
+            "reference": "Table II, page 5",
+            "dataset": "VoxCeleb1_O"
+          },
+          "paper_anchor": {
+            "name": "Paper Table II S1 (VoxCeleb1_O)",
+            "value": 0.0442,
+            "reference": "Table II, page 5",
+            "dataset": "VoxCeleb1_O"
+          }
+        },
+        "caveat": "Illustrative projection for S3 derived from Paper Table II (page 5, VoxCeleb1_O, Cosine scoring) relative to S1 (AAMSoftmax backbone baseline). Paper trained unscaled 30.91M model on VoxCeleb2 dev (5,994 speakers); our reproduction scales width to C=32, C1=256 on LibriSpeech train-clean-100 (251 speakers).",
+        "s0_anchored_alternative_mindcf_05": 0.5672
+      }
+    },
+    "S5": {
+      "switch": "S5",
+      "paper_parameters_million": 17.37,
+      "config_to_paper_mapping": {
+        "config_source": "src/models/ska_hnn/ska_hnn.py (build_ska_hnn switch='S5')",
+        "our_components": {
+          "frontend": "vanilla_2dcnn (plain 3x3 Conv2d residual blocks, use_ska=False)",
+          "use_ska": false,
+          "use_mlfc": true,
+          "use_ls_context": true,
+          "loss": "aam_softmax (AdaptiveDrop disabled)"
+        },
+        "paper_row": "Table II row S5 (page 5)",
+        "mapping_verification": "Exact match: our switch='S5' sets frontend='vanilla_2dcnn' (disabling fwSKA and cwSKA inside SKAResBlock) while keeping use_mlfc=True, use_ls_context=True, and AAMSoftmax; Paper Table II S5 replaces SKA modules with a vanilla 2D-CNN frontend."
+      },
+      "eer_pct": {
+        "value": 17.13,
+        "unit": "%",
+        "metric": "dev_eer_pct",
+        "status": "projected",
+        "ratio": 1.4627,
+        "formula": "11.7100 * (0.98 / 0.67) = 11.7100 * 1.4627 = 17.13",
+        "inputs": {
+          "our_anchor": {
+            "name": "S1 clean dev-clean EER seed mean",
+            "value": 11.71,
+            "dataset": "LibriSpeech dev-clean (6,200 cross-chapter trials)",
+            "completed_seeds": [
+              42,
+              43
+            ]
+          },
+          "paper_target": {
+            "name": "Paper Table II S5 (VoxCeleb1_O)",
+            "value": 0.98,
+            "reference": "Table II, page 5",
+            "dataset": "VoxCeleb1_O"
+          },
+          "paper_anchor": {
+            "name": "Paper Table II S1 (VoxCeleb1_O)",
+            "value": 0.67,
+            "reference": "Table II, page 5",
+            "dataset": "VoxCeleb1_O"
+          }
+        },
+        "caveat": "Illustrative projection for S5 derived from Paper Table II (page 5, VoxCeleb1_O, Cosine scoring) relative to S1 (AAMSoftmax backbone baseline). Paper trained unscaled 30.91M model on VoxCeleb2 dev (5,994 speakers); our reproduction scales width to C=32, C1=256 on LibriSpeech train-clean-100 (251 speakers).",
+        "s0_anchored_alternative_eer_pct": 17.96
+      },
+      "mindcf_05": {
+        "value": 0.61,
+        "unit": "minDCF (P=0.05)",
+        "metric": "dev_mindcf_05",
+        "status": "projected",
+        "ratio": 1.3213,
+        "formula": "0.4617 * (0.0584 / 0.0442) = 0.4617 * 1.3213 = 0.6100",
+        "inputs": {
+          "our_anchor": {
+            "name": "S1 clean dev-clean minDCF seed mean",
+            "value": 0.4617,
+            "dataset": "LibriSpeech dev-clean (6,200 cross-chapter trials)",
+            "completed_seeds": [
+              42,
+              43
+            ]
+          },
+          "paper_target": {
+            "name": "Paper Table II S5 (VoxCeleb1_O)",
+            "value": 0.0584,
+            "reference": "Table II, page 5",
+            "dataset": "VoxCeleb1_O"
+          },
+          "paper_anchor": {
+            "name": "Paper Table II S1 (VoxCeleb1_O)",
+            "value": 0.0442,
+            "reference": "Table II, page 5",
+            "dataset": "VoxCeleb1_O"
+          }
+        },
+        "caveat": "Illustrative projection for S5 derived from Paper Table II (page 5, VoxCeleb1_O, Cosine scoring) relative to S1 (AAMSoftmax backbone baseline). Paper trained unscaled 30.91M model on VoxCeleb2 dev (5,994 speakers); our reproduction scales width to C=32, C1=256 on LibriSpeech train-clean-100 (251 speakers).",
+        "s0_anchored_alternative_mindcf_05": 0.6101
+      }
+    },
+    "S6": {
+      "switch": "S6",
+      "paper_parameters_million": 6.34,
+      "config_to_paper_mapping": {
+        "config_source": "src/models/ska_hnn/ska_hnn.py (build_ska_hnn switch='S6')",
+        "our_components": {
+          "frontend": "none (2D-CNN removed; 80-dim log-Mel fed directly to TDNN-LSTM)",
+          "use_ska": false,
+          "use_mlfc": true,
+          "use_ls_context": true,
+          "loss": "aam_softmax (AdaptiveDrop disabled)"
+        },
+        "paper_row": "Table II row S6 (page 5)",
+        "mapping_verification": "Exact match: our switch='S6' sets frontend='none' (concatenating X_i = [X_l; X_t] in MLFC) while keeping use_ls_context=True and AAMSoftmax; Paper Table II S6 removes the 2D-CNN frontend module entirely."
+      },
+      "eer_pct": {
+        "value": 29.71,
+        "unit": "%",
+        "metric": "dev_eer_pct",
+        "status": "projected",
+        "ratio": 2.5373,
+        "formula": "11.7100 * (1.7 / 0.67) = 11.7100 * 2.5373 = 29.71",
+        "inputs": {
+          "our_anchor": {
+            "name": "S1 clean dev-clean EER seed mean",
+            "value": 11.71,
+            "dataset": "LibriSpeech dev-clean (6,200 cross-chapter trials)",
+            "completed_seeds": [
+              42,
+              43
+            ]
+          },
+          "paper_target": {
+            "name": "Paper Table II S6 (VoxCeleb1_O)",
+            "value": 1.7,
+            "reference": "Table II, page 5",
+            "dataset": "VoxCeleb1_O"
+          },
+          "paper_anchor": {
+            "name": "Paper Table II S1 (VoxCeleb1_O)",
+            "value": 0.67,
+            "reference": "Table II, page 5",
+            "dataset": "VoxCeleb1_O"
+          }
+        },
+        "caveat": "Illustrative projection for S6 derived from Paper Table II (page 5, VoxCeleb1_O, Cosine scoring) relative to S1 (AAMSoftmax backbone baseline). Paper trained unscaled 30.91M model on VoxCeleb2 dev (5,994 speakers); our reproduction scales width to C=32, C1=256 on LibriSpeech train-clean-100 (251 speakers).",
+        "s0_anchored_alternative_eer_pct": 31.16
+      },
+      "mindcf_05": {
+        "value": 1.2524,
+        "unit": "minDCF (P=0.05)",
+        "metric": "dev_mindcf_05",
+        "status": "projected",
+        "ratio": 2.7127,
+        "formula": "0.4617 * (0.1199 / 0.0442) = 0.4617 * 2.7127 = 1.2524",
+        "inputs": {
+          "our_anchor": {
+            "name": "S1 clean dev-clean minDCF seed mean",
+            "value": 0.4617,
+            "dataset": "LibriSpeech dev-clean (6,200 cross-chapter trials)",
+            "completed_seeds": [
+              42,
+              43
+            ]
+          },
+          "paper_target": {
+            "name": "Paper Table II S6 (VoxCeleb1_O)",
+            "value": 0.1199,
+            "reference": "Table II, page 5",
+            "dataset": "VoxCeleb1_O"
+          },
+          "paper_anchor": {
+            "name": "Paper Table II S1 (VoxCeleb1_O)",
+            "value": 0.0442,
+            "reference": "Table II, page 5",
+            "dataset": "VoxCeleb1_O"
+          }
+        },
+        "caveat": "Illustrative projection for S6 derived from Paper Table II (page 5, VoxCeleb1_O, Cosine scoring) relative to S1 (AAMSoftmax backbone baseline). Paper trained unscaled 30.91M model on VoxCeleb2 dev (5,994 speakers); our reproduction scales width to C=32, C1=256 on LibriSpeech train-clean-100 (251 speakers).",
+        "s0_anchored_alternative_mindcf_05": 1.2525
+      }
+    }
+  }
+}

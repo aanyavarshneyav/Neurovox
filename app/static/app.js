@@ -61,20 +61,27 @@
   /* Provenance pill badges (wording preserved). */
   function tagHtml(type) {
     const t = String(type || '').toLowerCase();
-    const cls = t === 'measured' ? 'tag-measured'
-      : t === 'external reference' ? 'tag-ext'
-        : t === 'paper' ? 'tag-paper'
-          : (t === 'planned' || t.indexOf('pending') >= 0) ? 'tag-planned'
-            : 'tag-neutral';
+    const cls = t === 'measured' || t.indexOf('measured') === 0 ? 'tag-measured'
+      : t === 'projected' || t.indexOf('projected') >= 0 ? 'tag-projected'
+        : t === 'provisional' || t.indexOf('provisional') >= 0 ? 'tag-provisional'
+          : t === 'external reference' ? 'tag-ext'
+            : t === 'paper' ? 'tag-paper'
+              : (t === 'planned' || t.indexOf('pending') >= 0 || t === 'target') ? 'tag-planned'
+                : 'tag-neutral';
     return `<span class="tag ${cls}">${esc(type)}</span>`;
   }
   function rich(s, withTerms) {
     let h = esc(clean(s));
     if (withTerms) h = explain(h);
-    return h.replace(/\[(measured|paper|external reference|planned|pending|external-unverified|engineering choice)\]/gi, (m, k) => {
+    return h.replace(/\[(measured|projected|provisional|paper|external reference|planned|pending|external-unverified|engineering choice)\]/gi, (m, k) => {
       const key = k.toLowerCase();
-      const cls = key === 'measured' ? 'tag-measured' : key === 'external reference' ? 'tag-ext'
-        : key === 'paper' ? 'tag-paper' : (key === 'planned' || key === 'pending') ? 'tag-planned' : 'tag-neutral';
+      const cls = key === 'measured' ? 'tag-measured'
+        : key === 'projected' ? 'tag-projected'
+          : key === 'provisional' ? 'tag-provisional'
+            : key === 'external reference' ? 'tag-ext'
+              : key === 'paper' ? 'tag-paper'
+                : (key === 'planned' || key === 'pending') ? 'tag-planned'
+                  : 'tag-neutral';
       return `<span class="tag ${cls}">${m}</span>`;
     });
   }
@@ -644,13 +651,17 @@
       const lo = !isNil(info.borderline_low) ? Number(info.borderline_low) : thr - margin;
       const hi = !isNil(info.borderline_high) ? Number(info.borderline_high) : thr + margin;
       const paramStr = !isNil(info.parameter_count) ? ` (${fmt(info.parameter_count)} params)` : '';
+      const seedStr = !isNil(info.seed) ? ` · seed ${esc(info.seed)}` : '';
+      const minDcfStr = !isNil(info.associated_mindcf) ? ` · minDCF ${num(info.associated_mindcf, 4)}` : '';
+      const shaShort = info.sha256 ? esc(info.sha256.slice(0, 8)) : '';
+      const shaStr = info.sha256 ? ` · sha256: <code class="small-mono" title="${esc(info.sha256)}">${shaShort}…</code>` : '';
       const labelPrefix = info.model_label || "Scaled reproduction on LibriSpeech train-clean-100, not the paper's model";
-      $('#model-line').innerHTML = `<strong>${esc(labelPrefix)}:</strong> ${esc(info.checkpoint_path)}${paramStr} · epoch ${esc(info.checkpoint_epoch)} · dev-clean ${term('EER')} ${num(info.dev_eer, 2)}% ${tagHtml('measured')}`;
+      $('#model-line').innerHTML = `<strong>${esc(labelPrefix)}:</strong> ${esc(info.checkpoint_path)}${paramStr}${seedStr} · epoch ${esc(info.checkpoint_epoch)} · dev-clean ${term('EER')} ${num(info.dev_eer, 2)}%${minDcfStr} ${tagHtml('measured')}${shaStr}`;
       if ($('#nav-val-model')) $('#nav-val-model').textContent = info.model_name || 'ska_hnn (S0)';
-      $('#nav-val-ckpt').textContent = `ep ${info.checkpoint_epoch} · ${num(info.dev_eer, 2)}% EER`;
+      $('#nav-val-ckpt').textContent = `${info.seed ? `s${info.seed} · ` : ''}ep ${info.checkpoint_epoch} · ${num(info.dev_eer, 2)}% EER`;
       $('#res-threshold').textContent = thr.toFixed(4);
-      $('#res-borderline').textContent = `${info.borderline_zone || `threshold +/- ${margin.toFixed(2)}`} (width ${width.toFixed(2)}: ${lo.toFixed(4)} to ${hi.toFixed(4)})`;
-      $('#res-ckpt-epoch').textContent = `${info.checkpoint_path} · ep ${info.checkpoint_epoch}`;
+      $('#res-borderline').textContent = `${info.borderline_zone || `threshold +/- ${margin.toFixed(2)}`} (band: ${lo.toFixed(4)} to ${hi.toFixed(4)})`;
+      $('#res-ckpt-epoch').textContent = `${info.checkpoint_path} · s${info.seed || 44} · ep ${info.checkpoint_epoch}`;
       $('#res-dev-eer').textContent = `${num(info.dev_eer, 2)}%`;
       buildGauge(thr, margin);
     } else {
@@ -801,8 +812,24 @@
   }
 
   /* =====================================================================
-   * 3. RESULTS (No S1 pill; Training time modal shows ONLY measured Mac rows)
+   * 3. EXPERIMENTAL RESULTS DASHBOARD (Sections A, B, C, D)
    * ===================================================================== */
+  const DASH_STATE = {
+    showProjections: true,
+    epochSeed: 42,
+    noiseMetric: 'eer_pct',
+    ecapaMetric: 'eer_pct',
+    ablationMetric: 'eer_pct',
+  };
+
+  function fmtDuration(sec) {
+    if (isNil(sec)) return '—';
+    const s = Number(sec);
+    if (!isFinite(s) || s <= 0) return '—';
+    const hrs = s / 3600;
+    return `${hrs.toFixed(2)} h (${fmt(Math.round(s))} s)`;
+  }
+
   function epochTable(run, title) {
     const rows = runEpochs(run);
     const ad = rows.some((r) => !isNil(r.loss_keep_ratio));
@@ -817,22 +844,27 @@
   }
 
   function openViewData(opener) {
-    const runs = DATA.results.runs;
-    let h = `<p class="muted small">Every epoch logged in <code>history.csv</code>. Dev-clean columns are filled only on epochs where an evaluation was run. From the epoch where ${term('AdaptiveDrop')} starts, S0's train loss is computed on the retained clips only, so it is not comparable with S1's.</p>`;
-    if (runs.s0) {
-      const p = progress(runs.s0);
-      h += epochTable(runs.s0, `S0 (IAAMSoftmax + AdaptiveDrop) — ${p.k}/${p.total} epochs logged`);
-    }
-    if (runs.s1) {
-      const p = progress(runs.s1);
-      h += epochTable(runs.s1, `S1 (AAMSoftmax) — ${p.done ? 'trained' : 'in progress'}: ${p.k}/${p.total} epochs logged`);
-    }
+    const runs = (DATA.results && DATA.results.runs) || {};
+    let h = `<p class="muted small">Every epoch logged in <code>history.csv</code>. Dev-clean columns are filled on evaluated epochs (every 2 epochs). From the epoch where ${term('AdaptiveDrop')} starts, S0's train loss is computed on the retained clips only, so it is not comparable with S1's.</p>`;
+    [
+      ['s0_seed42', 'S0 (IAAMSoftmax + AdaptiveDrop) · Seed 42'],
+      ['s1_seed42', 'S1 (Plain AAMSoftmax) · Seed 42'],
+      ['s0_seed43', 'S0 (IAAMSoftmax + AdaptiveDrop) · Seed 43'],
+      ['s1_seed43', 'S1 (Plain AAMSoftmax) · Seed 43'],
+      ['s0_seed44', 'S0 (IAAMSoftmax + AdaptiveDrop) · Seed 44'],
+      ['s1_seed44', 'S1 (Plain AAMSoftmax) · Seed 44'],
+    ].forEach(([key, label]) => {
+      const r = runs[key];
+      if (r && runEpochs(r).length) {
+        const p = progress(r);
+        h += epochTable(r, `${label} — ${p.done ? 'completed (final)' : 'in progress (provisional)'}: ${p.k}/${p.total} epochs logged`);
+      }
+    });
     openModal('Per-epoch data', h, opener, 'EPOCH LEDGER · HISTORY.CSV');
   }
 
-  /* Training time modal: show ONLY measured Mac rows; drop every Colab / not-run-yet / pending row. */
   function openTiming(opener) {
-    const runs = DATA.results.runs, b = DATA.results.benchmarks || {};
+    const runs = (DATA.results && DATA.results.runs) || {}, b = (DATA.results && DATA.results.benchmarks) || {};
     const rows = [];
     [['Mac M3 Pro · S0 pilot (1 epoch)', runs.pilot_s0_mac], ['Mac M3 Pro · S1 pilot (1 epoch)', runs.pilot_s1_mac]].forEach(([label, run]) => {
       const e = run && run.epochs && run.epochs[0];
@@ -873,36 +905,313 @@
     openModal('Training time per epoch (Mac M3 Pro)', `<p class="muted small">Measured epoch breakdown and layer micro-benchmarks on Apple M3 Pro (<code>device = mps</code>, fp32) ${tagHtml('measured')}.</p>${svg}${tbl}${mac}`, opener, 'BENCHMARK TELEMETRY · MAC M3 PRO');
   }
 
-  function renderResults() {
-    const R = DATA.results, runs = R.runs, s0 = runs.s0, s1 = runs.s1;
-    const meta = (s0 && s0.meta) || {};
-    const p0 = progress(s0);
-    const adStart = adaptiveStartEpoch(s0);
+  /* SVG Grouped / Single Bar Chart with solid (measured), hatched/translucent (projected), and provisional styling */
+  let hatchCounter = 0;
+  function groupedBarChart(host, o) {
+    if (!host) return;
+    host.innerHTML = '';
+    const groups = o.groups || [];
+    if (!groups.length) {
+      host.innerHTML = '<p class="muted small">No data points available for this chart.</p>';
+      return;
+    }
+    const W = o.width || 560, H = o.height || 220, pl = 52, pr = 16, pt = 30, pb = 38;
+    const allVals = [];
+    groups.forEach((g) => {
+      (g.bars || []).forEach((b) => {
+        if (!isNil(b.value)) {
+          const v = Number(b.value);
+          const err = Number(b.std || 0);
+          allVals.push(v + err);
+        }
+      });
+    });
+    const yMaxRaw = allVals.length ? Math.max.apply(null, allVals) : 1;
+    const yMin = 0;
+    const yMax = yMaxRaw > 0 ? yMaxRaw * 1.18 : 1;
+    const yFmt = o.yFmt || ((v) => v.toFixed(1));
+    const sy = (y) => H - pb - ((y - yMin) / (yMax - yMin)) * (H - pt - pb);
 
-    // Headline telemetry tiles
-    const stats = [];
-    if (s0 && !isNil(s0.best_dev_eer_pct)) {
-      stats.push(`<div class="card corner-card stat"><span class="stat-label">S0 best dev-clean ${term('EER')}</span><span class="stat-value">${num(s0.best_dev_eer_pct)}%</span><span class="stat-sub">at epoch ${s0.best_dev_epoch}${p0 && !p0.done ? ` (epoch ${p0.k}/${p0.total} logged)` : ''} ${tagHtml('measured')}</span></div>`);
-    }
-    if (!isNil(meta.parameter_count)) {
-      stats.push(`<div class="card corner-card stat"><span class="stat-label">Model size</span><span class="stat-value">${fmt(meta.parameter_count)}</span><span class="stat-sub">${term('parameters')} (torchinfo) ${tagHtml('measured')}</span></div>`);
-    }
-    if (!isNil(meta.dataset_size)) {
-      stats.push(`<div class="card corner-card stat"><span class="stat-label">Training data</span><span class="stat-value">${fmt(meta.dataset_size)}</span><span class="stat-sub">utterances · ${fmt(meta.num_speakers)} speakers ${tagHtml('measured')}</span></div>`);
-    }
-    const adRows = runEpochs(s0).filter((r) => !isNil(r.loss_keep_ratio) && (adStart == null || r.epoch >= adStart));
-    if (adRows.length) {
-      const a = adRows[0], z = adRows[adRows.length - 1];
-      const mn = Math.min.apply(null, adRows.map((r) => r.loss_keep_ratio)), mx = Math.max.apply(null, adRows.map((r) => r.loss_keep_ratio));
-      const pts = adRows.map((r, i) => `${(i / Math.max(1, adRows.length - 1) * 200).toFixed(1)},${(20 - ((r.loss_keep_ratio - mn) / (mx - mn || 1)) * 18 - 1).toFixed(1)}`).join(' ');
-      stats.push(`<div class="card corner-card stat"><span class="stat-label">${term('AdaptiveDrop')} keep ratio</span><span class="stat-value">${num(a.loss_keep_ratio * 100)}% → ${num(z.loss_keep_ratio * 100)}%</span>` +
-        `<span class="stat-sub">epoch ${a.epoch} → epoch ${z.epoch} ${tagHtml('measured')}</span><svg viewBox="0 0 200 22" preserveAspectRatio="none" aria-hidden="true"><polyline fill="none" stroke="${COLORS.s0}" stroke-width="2" points="${pts}"/></svg></div>`);
-    }
-    $('#stat-row').innerHTML = stats.join('');
+    const uid = ++hatchCounter;
+    let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" tabindex="0" aria-label="${esc(o.aria || 'Comparison bar chart')}">`;
+    svg += `<defs>` +
+      `<pattern id="hatch-proj-${uid}" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">` +
+      `<rect width="8" height="8" fill="rgba(56,189,248,0.22)"/>` +
+      `<line x1="0" y1="0" x2="0" y2="8" stroke="#38bdf8" stroke-width="2.2" stroke-opacity="0.85"/>` +
+      `</pattern>` +
+      `<pattern id="hatch-prov-${uid}" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">` +
+      `<rect width="8" height="8" fill="rgba(251,191,36,0.14)"/>` +
+      `<line x1="0" y1="0" x2="0" y2="8" stroke="#fbbf24" stroke-width="2" stroke-opacity="0.6"/>` +
+      `</pattern>` +
+      `</defs>`;
 
-    // Charts
+    for (let i = 0; i <= 4; i++) {
+      const v = yMin + ((yMax - yMin) * i) / 4;
+      const y = sy(v);
+      svg += `<line class="gridline" x1="${pl}" x2="${W - pr}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/>`;
+      svg += `<text class="ax" x="${pl - 6}" y="${(y + 3.5).toFixed(1)}" text-anchor="end">${esc(yFmt(v, false))}</text>`;
+    }
+
+    // Legend
+    if (o.legend && o.legend.length) {
+      let lx = pl;
+      o.legend.forEach((leg) => {
+        if (leg.type === 'projected') {
+          svg += `<rect x="${lx}" y="6" width="11" height="9" rx="2" fill="${leg.color || '#38bdf8'}"/>`;
+        } else if (leg.type === 'provisional') {
+          svg += `<rect x="${lx}" y="6" width="11" height="9" rx="2" fill="url(#hatch-prov-${uid})" stroke="#fbbf24" stroke-width="1.2" stroke-dasharray="2,1"/>`;
+        } else {
+          svg += `<rect x="${lx}" y="6" width="11" height="9" rx="2" fill="${leg.color || '#22d3ee'}"/>`;
+        }
+        svg += `<text class="legend-text" x="${lx + 15}" y="14">${esc(leg.label)}</text>`;
+        lx += 24 + leg.label.length * 6.2;
+      });
+    }
+
+    const plotW = W - pl - pr;
+    const gSlot = plotW / groups.length;
+    const barMeta = [];
+
+    groups.forEach((g, gi) => {
+      const gx = pl + gi * gSlot;
+      const bars = g.bars || [];
+      const nBars = Math.max(1, bars.length);
+      const maxGroupW = Math.min(gSlot * 0.76, nBars * 46);
+      const bw = Math.max(14, Math.min(42, (maxGroupW - (nBars - 1) * 6) / nBars));
+      const totalBarsW = nBars * bw + (nBars - 1) * 6;
+      const startX = gx + (gSlot - totalBarsW) / 2;
+
+      bars.forEach((b, bi) => {
+        const bx = startX + bi * (bw + 6);
+        const baseY = sy(0);
+        if (isNil(b.value)) {
+          svg += `<rect x="${bx.toFixed(1)}" y="${(baseY - 14).toFixed(1)}" width="${bw.toFixed(1)}" height="14" rx="2" fill="rgba(148,163,184,0.08)" stroke="rgba(148,163,184,0.35)" stroke-dasharray="3,2"/>`;
+          svg += `<text x="${(bx + bw / 2).toFixed(1)}" y="${(baseY - 4).toFixed(1)}" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#97aacb">${esc(b.emptyLabel || 'Pending')}</text>`;
+          barMeta.push({ x: bx + bw / 2, y: baseY - 14, group: g.label, bar: b });
+          return;
+        }
+        const val = Number(b.value);
+        const by = sy(val);
+        const bh = Math.max(2, baseY - by);
+        const st = String(b.status || 'measured').toLowerCase();
+        let fillAttr = `fill="${b.color || '#22d3ee'}"`;
+        let strokeAttr = '';
+        if (st === 'projected') {
+          fillAttr = `fill="${b.color || '#38bdf8'}"`;
+          strokeAttr = '';
+        } else if (st === 'provisional' || st === 'pending') {
+          fillAttr = `fill="url(#hatch-prov-${uid})"`;
+          strokeAttr = `stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="4,2"`;
+        }
+        svg += `<rect class="bar-rect" data-bidx="${barMeta.length}" x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="2.5" ${fillAttr} ${strokeAttr}/>`;
+
+        // Error bar for SD if provided
+        if (!isNil(b.std) && Number(b.std) > 0) {
+          const sd = Number(b.std);
+          const yTop = sy(val + sd);
+          const yBot = sy(Math.max(0, val - sd));
+          const cx = bx + bw / 2;
+          svg += `<line x1="${cx.toFixed(1)}" x2="${cx.toFixed(1)}" y1="${yTop.toFixed(1)}" y2="${yBot.toFixed(1)}" stroke="#e8f0fe" stroke-width="1.3"/>`;
+          svg += `<line x1="${(cx - 4).toFixed(1)}" x2="${(cx + 4).toFixed(1)}" y1="${yTop.toFixed(1)}" y2="${yTop.toFixed(1)}" stroke="#e8f0fe" stroke-width="1.3"/>`;
+          svg += `<line x1="${(cx - 4).toFixed(1)}" x2="${(cx + 4).toFixed(1)}" y1="${yBot.toFixed(1)}" y2="${yBot.toFixed(1)}" stroke="#e8f0fe" stroke-width="1.3"/>`;
+        }
+
+        const valLabel = yFmt(val, true) + (st === 'provisional' ? ' (prov)' : '');
+        const labelY = Math.max(pt + 9, by - 5);
+        svg += `<text x="${(bx + bw / 2).toFixed(1)}" y="${labelY.toFixed(1)}" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9.5" font-weight="700" fill="${st === 'provisional' ? '#fbbf24' : '#e8f0fe'}">${esc(valLabel)}</text>`;
+        barMeta.push({ x: bx + bw / 2, y: by, group: g.label, bar: b });
+      });
+
+      svg += `<text class="ax" x="${(gx + gSlot / 2).toFixed(1)}" y="${H - 18}" text-anchor="middle">${esc(g.label)}</text>`;
+      if (g.subLabel) {
+        svg += `<text class="ax" x="${(gx + gSlot / 2).toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="9.5" fill="#97aacb">${esc(g.subLabel)}</text>`;
+      }
+    });
+
+    svg += '</svg><div class="chart-tip" hidden></div>';
+    host.innerHTML = svg;
+
+    const svgEl = $('svg', host);
+    const tip = $('.chart-tip', host);
+    function showBarTip(idx) {
+      if (idx < 0 || idx >= barMeta.length) {
+        tip.hidden = true;
+        return;
+      }
+      const m = barMeta[idx];
+      const b = m.bar;
+      const st = String(b.status || 'measured').toUpperCase();
+      const valStr = isNil(b.value) ? (b.emptyLabel || 'Pending') : yFmt(Number(b.value), true);
+      const sdStr = (!isNil(b.std) && !isNil(b.value)) ? ` ± ${yFmt(Number(b.std), true)}` : '';
+      const statusPill = o.hideStatusTag ? '' : ` <span class="tag ${st === 'MEASURED' ? 'tag-measured' : st === 'PROJECTED' ? 'tag-projected' : 'tag-provisional'}">${esc(st.toLowerCase())}</span>`;
+      let html = `<div><b>${esc(m.group)} · ${esc(b.name || '')}</b></div>` +
+        `<div>Value: <b>${esc(valStr + sdStr)}</b>${statusPill}</div>`;
+      if (b.detail) html += `<div class="muted small">${esc(b.detail)}</div>`;
+      if (b.formula) html += `<div class="muted small">Formula: <code>${esc(b.formula)}</code></div>`;
+      tip.innerHTML = html;
+      tip.hidden = false;
+      const leftPct = Math.min(Math.max(4, (m.x / W) * 100 - 15), 62);
+      tip.style.left = leftPct + '%';
+      tip.style.top = '10px';
+    }
+    svgEl.addEventListener('mousemove', (e) => {
+      const rect = svgEl.getBoundingClientRect();
+      const mx = ((e.clientX - rect.left) / rect.width) * W;
+      let best = -1, bestDist = Infinity;
+      barMeta.forEach((m, idx) => {
+        const d = Math.abs(m.x - mx);
+        if (d < bestDist) { bestDist = d; best = idx; }
+      });
+      if (best >= 0 && bestDist < 65) showBarTip(best);
+      else tip.hidden = true;
+    });
+    svgEl.addEventListener('mouseleave', () => { tip.hidden = true; });
+    svgEl.addEventListener('blur', () => { tip.hidden = true; });
+  }
+
+  /* Interactive SVG Line Chart for Section B: Label-Noise Robustness (0%, 10%, 20%, 40%) */
+  function renderNoiseChart(host, measuredNoise, projectedNoise, sslRef, metricKey, showProj) {
+    if (!host) return;
+    host.innerHTML = '';
+    const W = 720, H = 250, pl = 56, pr = 26, pt = 34, pb = 38;
+    const levels = [0, 10, 20, 40];
+    const isEer = metricKey === 'eer_pct';
+    const yFmt = (v, exact) => isEer ? `${Number(v).toFixed(exact ? 2 : 1)}%` : Number(v).toFixed(exact ? 4 : 3);
+
+    const s0Pts = [];
+    const s1Pts = [];
+
+    levels.forEach((lvl) => {
+      const mRow = (measuredNoise && measuredNoise[String(lvl)]) || {};
+      const pRow = (projectedNoise && projectedNoise[String(lvl)]) || {};
+
+      const s0m = mRow.s0 && mRow.s0.status === 'measured' && !isNil(mRow.s0[metricKey]) ? Number(mRow.s0[metricKey]) : null;
+      const s1m = mRow.s1 && mRow.s1.status === 'measured' && !isNil(mRow.s1[metricKey]) ? Number(mRow.s1[metricKey]) : null;
+      const s0pObj = pRow.s0 && pRow.s0[metricKey];
+      const s1pObj = pRow.s1 && pRow.s1[metricKey];
+
+      if (s0m !== null) {
+        s0Pts.push({ x: lvl, y: s0m });
+      } else if (showProj && s0pObj && !isNil(s0pObj.value)) {
+        s0Pts.push({ x: lvl, y: Number(s0pObj.value) });
+      }
+
+      if (s1m !== null) {
+        s1Pts.push({ x: lvl, y: s1m });
+      } else if (showProj && s1pObj && !isNil(s1pObj.value)) {
+        s1Pts.push({ x: lvl, y: Number(s1pObj.value) });
+      }
+    });
+
+    const allYs = []
+      .concat(s0Pts.map((p) => p.y))
+      .concat(s1Pts.map((p) => p.y));
+    const yMin = 0;
+    const yMax = allYs.length ? Math.max.apply(null, allYs) * 1.35 : (isEer ? 20 : 0.8);
+    const sx = (x) => pl + (x / 40) * (W - pl - pr);
+    const sy = (y) => H - pb - ((y - yMin) / (yMax - yMin || 1)) * (H - pt - pb);
+
+    let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" tabindex="0" aria-label="Label-noise robustness chart across 0%, 10%, 20%, and 40% label noise">`;
+    for (let i = 0; i <= 4; i++) {
+      const v = yMin + ((yMax - yMin) * i) / 4;
+      const y = sy(v);
+      svg += `<line class="gridline" x1="${pl}" x2="${W - pr}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/>`;
+      svg += `<text class="ax" x="${pl - 8}" y="${(y + 3.5).toFixed(1)}" text-anchor="end">${esc(yFmt(v, false))}</text>`;
+    }
+
+    // X-axis ticks: 0%, 10%, 20%, 40%
+    levels.forEach((lvl) => {
+      const x = sx(lvl);
+      svg += `<line class="gridline" x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${pt}" y2="${H - pb}" stroke-dasharray="2,3"/>`;
+      svg += `<text class="ax" x="${x.toFixed(1)}" y="${H - 16}" text-anchor="middle">${lvl}% label noise</text>`;
+    });
+
+    // Legend
+    const legItems = [
+      { label: 'S0: IAAMSoftmax + AdaptiveDrop', color: COLORS.s0 },
+      { label: 'S1: AAMSoftmax', color: COLORS.s1 },
+    ];
+    let lx = pl;
+    legItems.forEach((it) => {
+      const cy = 12;
+      svg += `<line x1="${lx}" x2="${lx + 18}" y1="${cy}" y2="${cy}" stroke="${it.color}" stroke-width="2.2"/>`;
+      svg += `<circle cx="${lx + 9}" cy="${cy}" r="3.2" fill="${it.color}"/>`;
+      svg += `<text class="legend-text" x="${lx + 23}" y="${cy + 3.5}">${esc(it.label)}</text>`;
+      lx += 30 + it.label.length * 6.0;
+    });
+
+    // Draw continuous polylines & solid markers
+    [
+      { pts: s0Pts, color: COLORS.s0, offset: -10 },
+      { pts: s1Pts, color: COLORS.s1, offset: 14 },
+    ].forEach((s) => {
+      if (s.pts.length >= 2) {
+        const poly = s.pts.map((p) => `${sx(p.x).toFixed(1)},${sy(p.y).toFixed(1)}`).join(' ');
+        svg += `<polyline fill="none" stroke="${s.color}" stroke-width="2.4" points="${poly}"/>`;
+      }
+      s.pts.forEach((p) => {
+        const cx = sx(p.x), cy = sy(p.y);
+        svg += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="4.8" fill="${s.color}" stroke="#030711" stroke-width="1.5"/>`;
+        svg += `<text x="${cx.toFixed(1)}" y="${(cy + s.offset).toFixed(1)}" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9.5" font-weight="700" fill="${s.color}">${esc(yFmt(p.y, true))}</text>`;
+      });
+    });
+
+    svg += `<line class="cross" x1="0" x2="0" y1="${pt}" y2="${H - pb}" stroke="rgba(56,189,248,.45)" stroke-dasharray="3,3" style="display:none"/>`;
+    svg += '</svg><div class="chart-tip" hidden></div>';
+    host.innerHTML = svg;
+
+    const svgEl = $('svg', host);
+    const tip = $('.chart-tip', host);
+    const cross = $('.cross', host);
+
+    function showNoiseAt(lvl) {
+      const x = sx(lvl);
+      cross.setAttribute('x1', x); cross.setAttribute('x2', x); cross.style.display = '';
+      const mRow = (measuredNoise && measuredNoise[String(lvl)]) || {};
+      const pRow = (projectedNoise && projectedNoise[String(lvl)]) || {};
+      let html = `<div><b>${lvl}% Label Noise · dev-clean</b></div>`;
+      ['s0', 's1'].forEach((k) => {
+        const label = k.toUpperCase();
+        const m = mRow[k];
+        const p = pRow[k] && pRow[k][metricKey];
+        if (m && m.status === 'measured' && !isNil(m[metricKey])) {
+          html += `<div><b>${label}:</b> ${esc(yFmt(m[metricKey], true))}</div>`;
+        } else if (showProj && p && !isNil(p.value)) {
+          html += `<div><b>${label}:</b> ${esc(yFmt(p.value, true))}</div>`;
+        }
+      });
+      tip.innerHTML = html;
+      tip.hidden = false;
+      tip.style.left = Math.min(Math.max(4, (x / W) * 100 - 15), 58) + '%';
+      tip.style.top = '28px';
+    }
+
+    svgEl.addEventListener('mousemove', (e) => {
+      const rect = svgEl.getBoundingClientRect();
+      const mx = ((e.clientX - rect.left) / rect.width) * W;
+      let nearest = levels[0], best = Infinity;
+      levels.forEach((lvl) => {
+        const d = Math.abs(sx(lvl) - mx);
+        if (d < best) { best = d; nearest = lvl; }
+      });
+      showNoiseAt(nearest);
+    });
+    svgEl.addEventListener('mouseleave', () => { tip.hidden = true; cross.style.display = 'none'; });
+  }
+
+  function renderEpochTrajectories(seedNum) {
+    const R = DATA.results, runs = (R && R.runs) || {};
+    const s0 = runs[`s0_seed${seedNum}`] || (seedNum === 42 ? runs.s0 : null);
+    const s1 = runs[`s1_seed${seedNum}`] || (seedNum === 42 ? runs.s1 : null);
     const grid = $('#chart-grid');
+    if (!grid) return;
     grid.innerHTML = '';
+
+    if (!s0 && !s1) {
+      grid.innerHTML = `<p class="muted small">No per-epoch history logged yet for Seed ${esc(seedNum)}.</p>`;
+      return;
+    }
+
     function addChart(id, titleHtml) {
       const c = document.createElement('article');
       c.className = 'card corner-card chart-card';
@@ -910,45 +1219,645 @@
       grid.appendChild(c);
       return $('#' + id, c);
     }
-    const compare = s1Comparable(s0, s1);
+
+    const adStart = adaptiveStartEpoch(s0);
     const pts = (run, key, scale) => runEpochs(run).filter((r) => !isNil(r[key])).map((r) => ({ x: r.epoch, y: Number(r[key]) * (scale || 1) }));
     const mark = adStart != null ? { x: adStart, label: `AdaptiveDrop starts (epoch ${adStart})` } : null;
 
-    const devSeries = [{ name: 'S0', color: COLORS.s0, points: pts(s0, 'dev_eer_pct') }];
-    if (compare) devSeries.push({ name: 'S1', color: COLORS.s1, points: pts(s1, 'dev_eer_pct') });
-    lineChart(addChart('chart-dev', `Dev-clean ${term('EER')} per evaluated epoch (%)`), {
-      series: devSeries, mark, xMin: 1, yFmt: (v, exact) => (exact ? v.toFixed(2) : v.toFixed(1)) + '%', aria: 'Dev-clean EER per evaluated epoch',
-    });
+    const devSeries = [];
+    if (s0 && pts(s0, 'dev_eer_pct').length) devSeries.push({ name: `S0 (seed ${seedNum})`, color: COLORS.s0, points: pts(s0, 'dev_eer_pct') });
+    if (s1 && pts(s1, 'dev_eer_pct').length) devSeries.push({ name: `S1 (seed ${seedNum})`, color: COLORS.s1, points: pts(s1, 'dev_eer_pct') });
+    if (devSeries.length) {
+      lineChart(addChart('chart-dev', `Seed ${esc(seedNum)} · Dev-clean ${term('EER')} per evaluated epoch (%)`), {
+        series: devSeries, mark, xMin: 1, yFmt: (v, exact) => (exact ? v.toFixed(2) : v.toFixed(1)) + '%', aria: `Seed ${seedNum} Dev-clean EER per evaluated epoch`,
+      });
+    }
 
-    const lossSeries = [{ name: 'S0', color: COLORS.s0, points: pts(s0, 'train_loss') }];
-    if (compare) lossSeries.push({ name: 'S1', color: COLORS.s1, points: pts(s1, 'train_loss') });
-    const lossHost = addChart('chart-loss', 'Training loss per epoch' +
-      `<button type="button" class="info-btn" aria-label="About training loss comparability" data-tip="From the epoch where AdaptiveDrop starts, S0's training loss is computed on the retained clips only, so it is NOT comparable to S1's. Use the dev-clean EER chart for the S0 vs S1 comparison.">i</button>`);
-    lineChart(lossHost, { series: lossSeries, mark, xMin: 1, yFmt: (v) => v.toFixed(2), aria: 'Training loss per epoch' });
+    const lossSeries = [];
+    if (s0 && pts(s0, 'train_loss').length) lossSeries.push({ name: `S0 (seed ${seedNum})`, color: COLORS.s0, points: pts(s0, 'train_loss') });
+    if (s1 && pts(s1, 'train_loss').length) lossSeries.push({ name: `S1 (seed ${seedNum})`, color: COLORS.s1, points: pts(s1, 'train_loss') });
+    if (lossSeries.length) {
+      const lossHost = addChart('chart-loss', `Seed ${esc(seedNum)} · Training loss per epoch` +
+        `<button type="button" class="info-btn" aria-label="About training loss comparability" data-tip="From the epoch where AdaptiveDrop starts, S0's training loss is computed on the retained clips only, so it is NOT comparable to S1's. Use the dev-clean EER chart for the S0 vs S1 comparison.">i</button>`);
+      lineChart(lossHost, { series: lossSeries, mark, xMin: 1, yFmt: (v) => v.toFixed(2), aria: `Seed ${seedNum} Training loss per epoch` });
+    }
 
     const keep = pts(s0, 'loss_keep_ratio', 100);
     if (keep.length) {
-      lineChart(addChart('chart-keep', `${term('AdaptiveDrop')}: share of clips kept (%)`), {
+      lineChart(addChart('chart-keep', `Seed ${esc(seedNum)} · ${term('AdaptiveDrop')}: share of clips kept (%)`), {
         series: [{ name: 'Keep ratio', color: COLORS.same, points: keep }], mark, xMin: 1, yFmt: (v, exact) => v.toFixed(exact ? 2 : 1) + '%', aria: 'AdaptiveDrop keep ratio per epoch',
       });
-      lineChart(addChart('chart-fc', `${term('AdaptiveDrop')}: clips filtered and corrected`), {
+      lineChart(addChart('chart-fc', `Seed ${esc(seedNum)} · ${term('AdaptiveDrop')}: clips filtered and corrected`), {
         series: [
           { name: 'Filtered', color: COLORS.diff, points: pts(s0, 'loss_num_filtered') },
           { name: 'Corrected', color: COLORS.warn, points: pts(s0, 'loss_num_corrected') },
         ], mark, xMin: 1, yMin: 0, yFmt: (v) => fmt(Math.round(v)), aria: 'Clips filtered and corrected per epoch',
       });
     }
+  }
 
-    // Train-vs-dev EER panel: only when a real train-probe EER exists in history.csv.
-    const probeRun = [s0, s1].find((r) => runEpochs(r).some((x) => !isNil(x.train_probe_eer_pct)));
-    if (probeRun) {
-      lineChart(addChart('chart-probe', `Train vs dev ${term('EER')} (%)`), {
-        series: [
-          { name: 'Train probe EER', color: COLORS.warn, points: pts(probeRun, 'train_probe_eer_pct') },
-          { name: 'Dev-clean EER', color: COLORS.s0, points: runEpochs(probeRun).filter((r) => !isNil(r.train_probe_eer_pct) && !isNil(r.dev_eer_pct)).map((r) => ({ x: r.epoch, y: Number(r.dev_eer_pct) })) },
-        ], xMin: 1, yFmt: (v, exact) => v.toFixed(exact ? 2 : 1) + '%', aria: 'Train probe EER versus dev-clean EER',
+  function renderResults() {
+    const R = DATA.results || {};
+    const meas = R.measured || {};
+    const proj = R.projected || {};
+    const headline = meas.headline_s0_s1 || {};
+    const summary = headline.summary || {};
+    const s0Sum = summary.s0 || {};
+    const s1Sum = summary.s1 || {};
+    const seedList = headline.seeds || [];
+    const completedSeeds = headline.completed_seeds || [];
+    const pendingSeeds = headline.pending_seeds || [];
+    const cfg = headline.training_config || {};
+    const showProj = true;
+
+    /* -------------------------------------------------------------------
+     * SECTION A: Main S0 vs S1 Comparison (MEASURED DATA ONLY)
+     * ------------------------------------------------------------------- */
+    const badgesEl = $('#sec-a-badges');
+    if (badgesEl) {
+      const seedStatusTxt = pendingSeeds.length
+        ? `${completedSeeds.length}/${seedList.length} seeds completed · Seed ${pendingSeeds.join(', ')} in progress`
+        : `${completedSeeds.length}/${seedList.length} seeds completed`;
+      badgesEl.innerHTML =
+        `<span class="tag tag-measured">measured data only</span>` +
+        `<span class="tag ${pendingSeeds.length ? 'tag-provisional' : 'tag-measured'}">${esc(seedStatusTxt)}</span>`;
+    }
+
+    // 4 Headline Stat Cards (Strictly measured completed-seed stats only)
+    const statCards = [];
+    const seedsLabel = completedSeeds.length ? `Seeds ${completedSeeds.join(', ')} (n=${completedSeeds.length})` : 'No completed seed pairs yet';
+    statCards.push(
+      `<div class="card corner-card stat">` +
+      `<span class="stat-label">S0 dev-clean ${term('EER')} (Mean ± SD)</span>` +
+      `<span class="stat-value">${!isNil(s0Sum.eer_mean_pct) ? `${num(s0Sum.eer_mean_pct, 2)}% ± ${num(s0Sum.eer_std_pct, 2)}%` : 'Pending'}</span>` +
+      `<span class="stat-sub">IAAMSoftmax + AdaptiveDrop · ${esc(seedsLabel)} ${tagHtml('measured')}</span>` +
+      `</div>`
+    );
+    statCards.push(
+      `<div class="card corner-card stat">` +
+      `<span class="stat-label">S1 dev-clean ${term('EER')} (Mean ± SD)</span>` +
+      `<span class="stat-value">${!isNil(s1Sum.eer_mean_pct) ? `${num(s1Sum.eer_mean_pct, 2)}% ± ${num(s1Sum.eer_std_pct, 2)}%` : 'Pending'}</span>` +
+      `<span class="stat-sub">Plain AAMSoftmax · ${esc(seedsLabel)} ${tagHtml('measured')}</span>` +
+      `</div>`
+    );
+    statCards.push(
+      `<div class="card corner-card stat">` +
+      `<span class="stat-label">Dev-clean ${term('minDCF')} (P=0.05)</span>` +
+      `<span class="stat-value">${!isNil(s0Sum.mindcf_mean) ? `${num(s0Sum.mindcf_mean, 4)} vs ${num(s1Sum.mindcf_mean, 4)}` : 'Pending'}</span>` +
+      `<span class="stat-sub">S0 (±${num(s0Sum.mindcf_std, 4)}) vs S1 (±${num(s1Sum.mindcf_std, 4)}) · ${esc(seedsLabel)} ${tagHtml('measured')}</span>` +
+      `</div>`
+    );
+    statCards.push(
+      `<div class="card corner-card stat">` +
+      `<span class="stat-label">Backbone &amp; Seed Completion</span>` +
+      `<span class="stat-value">${fmt(headline.parameter_count || 4167700)}</span>` +
+      `<span class="stat-sub">${term('parameters')} (torchinfo) · ${completedSeeds.length} completed seed pairs ${tagHtml('measured')}</span>` +
+      `</div>`
+    );
+    $('#stat-row').innerHTML = statCards.join('');
+
+    // Per-seed comparison table + Training configuration strip
+    const sumWrap = $('#s0-s1-summary-wrap');
+    if (sumWrap) {
+      // 1. Headline Three-Seed Comparison Table (Section E.1)
+      const s42 = seedList.find((s) => s.seed === 42) || {};
+      const s43 = seedList.find((s) => s.seed === 43) || {};
+      const s44 = seedList.find((s) => s.seed === 44) || {};
+
+      const s0_42_eer = (s42.s0 && !isNil(s42.s0.best_dev_eer_pct)) ? `${num(s42.s0.best_dev_eer_pct, 2)}%` : '—';
+      const s1_42_eer = (s42.s1 && !isNil(s42.s1.best_dev_eer_pct)) ? `${num(s42.s1.best_dev_eer_pct, 2)}%` : '—';
+      const s0_43_eer = (s43.s0 && !isNil(s43.s0.best_dev_eer_pct)) ? `${num(s43.s0.best_dev_eer_pct, 2)}%` : '—';
+      const s1_43_eer = (s43.s1 && !isNil(s43.s1.best_dev_eer_pct)) ? `${num(s43.s1.best_dev_eer_pct, 2)}%` : '—';
+      const s0_44_eer = (s44.s0 && !isNil(s44.s0.best_dev_eer_pct)) ? `${num(s44.s0.best_dev_eer_pct, 2)}%` : '—';
+      const s1_44_eer = (s44.s1 && !isNil(s44.s1.best_dev_eer_pct)) ? `${num(s44.s1.best_dev_eer_pct, 2)}%` : '—';
+
+      const s0_mean_eer = !isNil(s0Sum.eer_mean_pct) ? `${num(s0Sum.eer_mean_pct, 4)}%` : '—';
+      const s1_mean_eer = !isNil(s1Sum.eer_mean_pct) ? `${num(s1Sum.eer_mean_pct, 4)}%` : '—';
+      const s0_sd_eer = !isNil(s0Sum.eer_std_pct) ? `${num(s0Sum.eer_std_pct, 4)}%` : '—';
+      const s1_sd_eer = !isNil(s1Sum.eer_std_pct) ? `${num(s1Sum.eer_std_pct, 4)}%` : '—';
+
+      const s0_42_dcf = (s42.s0 && !isNil(s42.s0.best_dev_mindcf_05)) ? num(s42.s0.best_dev_mindcf_05, 4) : '—';
+      const s1_42_dcf = (s42.s1 && !isNil(s42.s1.best_dev_mindcf_05)) ? num(s42.s1.best_dev_mindcf_05, 4) : '—';
+      const s0_43_dcf = (s43.s0 && !isNil(s43.s0.best_dev_mindcf_05)) ? num(s43.s0.best_dev_mindcf_05, 4) : '—';
+      const s1_43_dcf = (s43.s1 && !isNil(s43.s1.best_dev_mindcf_05)) ? num(s43.s1.best_dev_mindcf_05, 4) : '—';
+      const s0_44_dcf = (s44.s0 && !isNil(s44.s0.best_dev_mindcf_05)) ? num(s44.s0.best_dev_mindcf_05, 4) : '—';
+      const s1_44_dcf = (s44.s1 && !isNil(s44.s1.best_dev_mindcf_05)) ? num(s44.s1.best_dev_mindcf_05, 4) : '—';
+
+      const s0_mean_dcf = !isNil(s0Sum.mindcf_mean) ? num(s0Sum.mindcf_mean, 4) : '—';
+      const s1_mean_dcf = !isNil(s1Sum.mindcf_mean) ? num(s1Sum.mindcf_mean, 4) : '—';
+      const s0_sd_dcf = !isNil(s0Sum.mindcf_std) ? num(s0Sum.mindcf_std, 4) : '—';
+      const s1_sd_dcf = !isNil(s1Sum.mindcf_std) ? num(s1Sum.mindcf_std, 4) : '—';
+
+      let headlineCard =
+        `<div class="card corner-card headline-comparison-card">` +
+        `<div class="headline-table-head">` +
+        `<div><span class="micro-label">THREE-SEED HEADLINE COMPARISON TABLE · DEV-CLEAN</span>` +
+        `<h4>Three-Seed Metric Comparison: S0 vs S1</h4></div>` +
+        `<span class="tag tag-measured">measured (seeds 42, 43, 44)</span>` +
+        `</div>` +
+        `<div class="table-wrap"><table class="headline-table"><thead><tr>` +
+        `<th>Metric</th>` +
+        `<th class="n">S0: IAAMSoftmax + AdaptiveDrop</th>` +
+        `<th class="n">S1: Plain AAMSoftmax</th>` +
+        `</tr></thead><tbody>` +
+        `<tr><td>Seed 42 EER</td><td class="n">${s0_42_eer}</td><td class="n">${s1_42_eer}</td></tr>` +
+        `<tr><td>Seed 43 EER</td><td class="n">${s0_43_eer}</td><td class="n">${s1_43_eer}</td></tr>` +
+        `<tr><td>Seed 44 EER</td><td class="n">${s0_44_eer}</td><td class="n">${s1_44_eer}</td></tr>` +
+        `<tr class="highlight-row"><td><b>Mean EER</b></td><td class="n"><b>${s0_mean_eer}</b></td><td class="n"><b>${s1_mean_eer}</b></td></tr>` +
+        `<tr><td>EER SD</td><td class="n">${s0_sd_eer}</td><td class="n">${s1_sd_eer}</td></tr>` +
+        `<tr><td>Seed 42 minDCF</td><td class="n">${s0_42_dcf}</td><td class="n">${s1_42_dcf}</td></tr>` +
+        `<tr><td>Seed 43 minDCF</td><td class="n">${s0_43_dcf}</td><td class="n">${s1_43_dcf}</td></tr>` +
+        `<tr><td>Seed 44 minDCF</td><td class="n">${s0_44_dcf}</td><td class="n">${s1_44_dcf}</td></tr>` +
+        `<tr class="highlight-row"><td><b>Mean minDCF</b></td><td class="n"><b>${s0_mean_dcf}</b></td><td class="n"><b>${s1_mean_dcf}</b></td></tr>` +
+        `<tr><td>minDCF SD</td><td class="n">${s0_sd_dcf}</td><td class="n">${s1_sd_dcf}</td></tr>` +
+        `</tbody></table></div>` +
+        `<div class="headline-interpretation-callout" role="note">` +
+        `<strong>Interpretation:</strong> S1 achieved marginally lower mean dev-clean EER, while S0 achieved lower mean dev-clean minDCF. With three seeds, neither establishes a statistically significant overall advantage.` +
+        `</div>` +
+        `</div>`;
+
+      // 2. Per-seed execution telemetry table
+      let tbl = `<div class="card corner-card"><div class="headline-table-head" style="margin-bottom:8px">` +
+        `<div><span class="micro-label">RUN-LEVEL TELEMETRY LEDGER</span><h4>Per-Seed Run Records &amp; Checkpoint Metrics</h4></div>` +
+        `</div><div class="table-wrap"><table><thead><tr>` +
+        `<th>Seed</th><th>Configuration</th><th>Run Status</th><th class="n">Epochs</th>` +
+        `<th class="n">Best dev-clean ${term('EER')} (%)</th><th class="n">Best EER Epoch</th>` +
+        `<th class="n">Best dev-clean ${term('minDCF')} (P=0.05)</th><th class="n">minDCF @ Best EER</th>` +
+        `<th class="n">Training Time</th><th>Source File</th>` +
+        `</tr></thead><tbody>`;
+
+      seedList.forEach((sr) => {
+        const pairDone = sr.pair_completed;
+        [
+          ['S0: SKA-HNN + IAAMSoftmax + AdaptiveDrop', sr.s0],
+          ['S1: SKA-HNN + Plain AAMSoftmax', sr.s1],
+        ].forEach(([cfgName, r]) => {
+          if (!r || !r.exists) {
+            tbl += `<tr class="dim"><td><b>Seed ${esc(sr.seed)}</b></td><td>${esc(cfgName)}</td>` +
+              `<td>${tagHtml('not_run')} <span class="muted small">queued / not started</span></td>` +
+              `<td class="n">0/${esc(r ? r.target_epochs : 30)}</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td>` +
+              `<td><code>results/s*_${esc(sr.seed)}/</code></td></tr>`;
+            return;
+          }
+          const isFinal = r.completed && pairDone;
+          const statusCell = isFinal
+            ? `${tagHtml('measured')} <span class="small muted">final (in mean/SD)</span>`
+            : r.completed && !pairDone
+              ? `${tagHtml('provisional')} <span class="small muted">awaiting paired run</span>`
+              : `${tagHtml('provisional')} <span class="small muted">in progress (excluded from mean/SD)</span>`;
+          const valCls = isFinal ? '' : ' prov-val';
+          tbl += `<tr${isFinal ? '' : ' class="dim"'}>` +
+            `<td><b>Seed ${esc(sr.seed)}</b></td>` +
+            `<td>${esc(cfgName)}</td>` +
+            `<td>${statusCell}</td>` +
+            `<td class="n">${esc(r.num_epochs_logged)}/${esc(r.target_epochs)}</td>` +
+            `<td class="n${valCls}"><b>${!isNil(r.best_dev_eer_pct) ? num(r.best_dev_eer_pct, 2) + '%' : '—'}</b>${isFinal ? '' : ' (provisional)'}</td>` +
+            `<td class="n">${!isNil(r.best_dev_epoch) ? 'ep ' + esc(r.best_dev_epoch) : '—'}</td>` +
+            `<td class="n${valCls}">${!isNil(r.best_dev_mindcf_05) ? num(r.best_dev_mindcf_05, 4) + (r.best_dev_mindcf_epoch ? ` (ep ${r.best_dev_mindcf_epoch})` : '') : '—'}</td>` +
+            `<td class="n">${!isNil(r.mindcf_at_best_eer) ? num(r.mindcf_at_best_eer, 4) : '—'}</td>` +
+            `<td class="n">${fmtDuration(r.total_train_sec)}</td>` +
+            `<td><code>${esc(r.source_csv || '—')}</code></td>` +
+            `</tr>`;
+        });
+      });
+
+      // Completed-seed summary rows
+      tbl += `<tr>` +
+        `<td colspan="2"><b>S0 Completed-Seed Mean ± SD (${esc(seedsLabel)})</b></td>` +
+        `<td>${tagHtml('measured')}</td>` +
+        `<td class="n">30/30</td>` +
+        `<td class="n"><b>${!isNil(s0Sum.eer_mean_pct) ? `${num(s0Sum.eer_mean_pct, 4)}% ± ${num(s0Sum.eer_std_pct, 4)}%` : '—'}</b></td>` +
+        `<td class="n">—</td>` +
+        `<td class="n"><b>${!isNil(s0Sum.mindcf_mean) ? `${num(s0Sum.mindcf_mean, 4)} ± ${num(s0Sum.mindcf_std, 4)}` : '—'}</b></td>` +
+        `<td class="n">${!isNil(s0Sum.mindcf_at_best_eer_mean) ? `${num(s0Sum.mindcf_at_best_eer_mean, 4)} ± ${num(s0Sum.mindcf_at_best_eer_std, 4)}` : '—'}</td>` +
+        `<td class="n">${fmtDuration(s0Sum.mean_train_sec)}</td>` +
+        `<td><code>results/s0_seed{${completedSeeds.join(',')}}/</code></td>` +
+        `</tr>`;
+      tbl += `<tr>` +
+        `<td colspan="2"><b>S1 Completed-Seed Mean ± SD (${esc(seedsLabel)})</b></td>` +
+        `<td>${tagHtml('measured')}</td>` +
+        `<td class="n">30/30</td>` +
+        `<td class="n"><b>${!isNil(s1Sum.eer_mean_pct) ? `${num(s1Sum.eer_mean_pct, 4)}% ± ${num(s1Sum.eer_std_pct, 4)}%` : '—'}</b></td>` +
+        `<td class="n">—</td>` +
+        `<td class="n"><b>${!isNil(s1Sum.mindcf_mean) ? `${num(s1Sum.mindcf_mean, 4)} ± ${num(s1Sum.mindcf_std, 4)}` : '—'}</b></td>` +
+        `<td class="n">${!isNil(s1Sum.mindcf_at_best_eer_mean) ? `${num(s1Sum.mindcf_at_best_eer_mean, 4)} ± ${num(s1Sum.mindcf_at_best_eer_std, 4)}` : '—'}</td>` +
+        `<td class="n">${fmtDuration(s1Sum.mean_train_sec)}</td>` +
+        `<td><code>results/s1_seed{${completedSeeds.join(',')}}/</code></td>` +
+        `</tr>`;
+      tbl += `</tbody></table></div>`;
+
+      // Training Configuration Strip
+      const lr = cfg.lr_schedule || {};
+      const augObj = cfg.augmentation_flags || {};
+      const augOn = Object.keys(augObj).filter((k) => augObj[k]).join(', ') || 'speed, noise, babble, specaug';
+      tbl += `<div class="config-strip">` +
+        `<span><b>Evaluation Split:</b> ${esc(cfg.eval_dataset || 'LibriSpeech dev-clean (6,200 cross-chapter trials)')}</span>` +
+        `<span><b>Train Split:</b> ${esc(cfg.train_dataset || 'LibriSpeech train-clean-100 (251 spk, 28,539 utts)')}</span>` +
+        `<span><b>Backbone:</b> ${esc(cfg.backbone_scale || 'C=32, C1=256')} (${fmt(cfg.parameter_count || 4167700)} params)</span>` +
+        `<span><b>Hardware &amp; Precision:</b> <code>${esc(cfg.device || 'mps')}</code> · <code>${esc(cfg.precision || 'fp32')}</code></span>` +
+        `<span><b>Batch &amp; Epochs:</b> ${esc(cfg.batch_size || 64)} × ${esc(cfg.batches_per_epoch || 446)} steps/ep · ${esc(cfg.epochs || 30)} epochs</span>` +
+        `<span><b>LR Schedule:</b> ${esc(lr.type || 'CyclicLR')} (${esc(lr.base_lr || 1e-7)} → ${esc(lr.max_lr || 0.001)})</span>` +
+        `<span><b>Augmentations:</b> ${esc(augOn)}</span>` +
+        `<span><b>Config Hashes:</b> S0=<code>${esc(cfg.s0_config_hash || 'ada06252')}</code>, S1=<code>${esc(cfg.s1_config_hash || '964e995e')}</code></span>` +
+        `</div></div>`;
+      sumWrap.innerHTML = headlineCard + tbl;
+    }
+
+    // 3 Headline Comparison Charts (Grouped summary, EER across seeds, minDCF across seeds)
+    const hGrid = $('#headline-charts-grid');
+    if (hGrid) {
+      hGrid.innerHTML =
+        `<article class="card corner-card chart-card">` +
+        `<h3>A. Best dev-clean ${term('EER')} Across Seeds (%)</h3>` +
+        `<div class="chart" id="chart-s0-s1-seed-eer"></div>` +
+        `<p class="chart-note">Individual seed best dev-clean EER (%) comparing S0 and S1 across completed seeds 42, 43, 44.</p>` +
+        `</article>` +
+        `<article class="card corner-card chart-card">` +
+        `<h3>B. Best dev-clean ${term('minDCF')} (P=0.05) Across Seeds</h3>` +
+        `<div class="chart" id="chart-s0-s1-seed-mindcf"></div>` +
+        `<p class="chart-note">Individual seed best dev-clean minDCF (P=0.05) comparing S0 and S1 across completed seeds 42, 43, 44.</p>` +
+        `</article>` +
+        `<article class="card corner-card chart-card">` +
+        `<h3>C. Mean Comparison (Mean ± SD)</h3>` +
+        `<div class="chart" id="chart-s0-s1-mean-comp"></div>` +
+        `<p class="chart-note">dev-clean 3-seed mean ± sample standard deviation (ddof=1) error bars for EER (%) and minDCF.</p>` +
+        `</article>`;
+
+      groupedBarChart($('#chart-s0-s1-seed-eer'), {
+        aria: 'Best dev-clean EER across seeds 42, 43, and 44',
+        yFmt: (v, exact) => `${v.toFixed(exact ? 2 : 1)}%`,
+        legend: [
+          { label: 'S0 (IAAMSoftmax + AdaptiveDrop)', color: COLORS.s0, type: 'measured' },
+          { label: 'S1 (Plain AAMSoftmax)', color: COLORS.s1, type: 'measured' },
+        ],
+        groups: seedList.map((sr) => ({
+          label: `Seed ${sr.seed}`,
+          subLabel: sr.pair_completed ? 'completed (final)' : 'in progress (provisional)',
+          bars: [
+            {
+              name: 'S0 Best dev-clean EER',
+              value: sr.s0 ? sr.s0.best_dev_eer_pct : null,
+              color: COLORS.s0,
+              status: sr.pair_completed ? 'measured' : (sr.s0 && sr.s0.exists ? 'provisional' : 'not_run'),
+              emptyLabel: 'Queued',
+              detail: sr.s0 && sr.s0.exists ? `${sr.s0.num_epochs_logged}/${sr.s0.target_epochs} epochs · best @ ep ${sr.s0.best_dev_epoch}` : 'Not started yet',
+            },
+            {
+              name: 'S1 Best dev-clean EER',
+              value: sr.s1 ? sr.s1.best_dev_eer_pct : null,
+              color: COLORS.s1,
+              status: sr.pair_completed ? 'measured' : (sr.s1 && sr.s1.exists ? 'provisional' : 'not_run'),
+              emptyLabel: 'Queued',
+              detail: sr.s1 && sr.s1.exists ? `${sr.s1.num_epochs_logged}/${sr.s1.target_epochs} epochs · best @ ep ${sr.s1.best_dev_epoch}` : 'Queued after S0 seed ' + sr.seed,
+            },
+          ],
+        })),
+      });
+
+      groupedBarChart($('#chart-s0-s1-seed-mindcf'), {
+        aria: 'Best dev-clean minDCF across seeds 42, 43, and 44',
+        yFmt: (v, exact) => v.toFixed(exact ? 4 : 2),
+        legend: [
+          { label: 'S0 (IAAMSoftmax + AdaptiveDrop)', color: COLORS.s0, type: 'measured' },
+          { label: 'S1 (Plain AAMSoftmax)', color: COLORS.s1, type: 'measured' },
+        ],
+        groups: seedList.map((sr) => ({
+          label: `Seed ${sr.seed}`,
+          subLabel: sr.pair_completed ? 'completed (final)' : 'in progress (provisional)',
+          bars: [
+            {
+              name: 'S0 Best dev-clean minDCF',
+              value: sr.s0 ? sr.s0.best_dev_mindcf_05 : null,
+              color: COLORS.s0,
+              status: sr.pair_completed ? 'measured' : (sr.s0 && sr.s0.exists ? 'provisional' : 'not_run'),
+              emptyLabel: 'Queued',
+              detail: sr.s0 && sr.s0.exists ? `${sr.s0.num_epochs_logged}/${sr.s0.target_epochs} epochs · best @ ep ${sr.s0.best_dev_mindcf_epoch}` : 'Not started yet',
+            },
+            {
+              name: 'S1 Best dev-clean minDCF',
+              value: sr.s1 ? sr.s1.best_dev_mindcf_05 : null,
+              color: COLORS.s1,
+              status: sr.pair_completed ? 'measured' : (sr.s1 && sr.s1.exists ? 'provisional' : 'not_run'),
+              emptyLabel: 'Queued',
+              detail: sr.s1 && sr.s1.exists ? `${sr.s1.num_epochs_logged}/${sr.s1.target_epochs} epochs · best @ ep ${sr.s1.best_dev_mindcf_epoch}` : 'Queued after S0 seed ' + sr.seed,
+            },
+          ],
+        })),
+      });
+
+      const meanHost = $('#chart-s0-s1-mean-comp');
+      if (meanHost) {
+        meanHost.innerHTML =
+          `<div class="mean-charts-split">` +
+          `<div class="mean-subchart-box"><h5 class="subchart-title">Mean EER (%) ± 1 SD</h5><div id="subchart-mean-eer"></div></div>` +
+          `<div class="mean-subchart-box"><h5 class="subchart-title">Mean minDCF ± 1 SD</h5><div id="subchart-mean-mindcf"></div></div>` +
+          `</div>`;
+
+        groupedBarChart($('#subchart-mean-eer'), {
+          width: 270,
+          height: 195,
+          aria: 'Mean dev-clean EER comparison: S0 vs S1 with error bars',
+          yFmt: (v, exact) => `${v.toFixed(exact ? 2 : 1)}%`,
+          legend: [
+            { label: 'S0 (IAAM)', color: COLORS.s0, type: 'measured' },
+            { label: 'S1 (AAM)', color: COLORS.s1, type: 'measured' },
+          ],
+          groups: [
+            {
+              label: 'Mean EER',
+              subLabel: `S0: ${num(s0Sum.eer_mean_pct, 2)}% vs S1: ${num(s1Sum.eer_mean_pct, 2)}%`,
+              bars: [
+                { name: 'S0 Mean EER', value: s0Sum.eer_mean_pct, std: s0Sum.eer_std_pct, color: COLORS.s0, status: 'measured', detail: `S0: ${num(s0Sum.eer_mean_pct, 4)}% ± ${num(s0Sum.eer_std_pct, 4)}%` },
+                { name: 'S1 Mean EER', value: s1Sum.eer_mean_pct, std: s1Sum.eer_std_pct, color: COLORS.s1, status: 'measured', detail: `S1: ${num(s1Sum.eer_mean_pct, 4)}% ± ${num(s1Sum.eer_std_pct, 4)}%` },
+              ],
+            },
+          ],
+        });
+
+        groupedBarChart($('#subchart-mean-mindcf'), {
+          width: 270,
+          height: 195,
+          aria: 'Mean dev-clean minDCF comparison: S0 vs S1 with error bars',
+          yFmt: (v, exact) => v.toFixed(exact ? 4 : 2),
+          legend: [
+            { label: 'S0 (IAAM)', color: COLORS.s0, type: 'measured' },
+            { label: 'S1 (AAM)', color: COLORS.s1, type: 'measured' },
+          ],
+          groups: [
+            {
+              label: 'Mean minDCF',
+              subLabel: `S0: ${num(s0Sum.mindcf_mean, 4)} vs S1: ${num(s1Sum.mindcf_mean, 4)}`,
+              bars: [
+                { name: 'S0 Mean minDCF', value: s0Sum.mindcf_mean, std: s0Sum.mindcf_std, color: COLORS.s0, status: 'measured', detail: `S0: ${num(s0Sum.mindcf_mean, 4)} ± ${num(s0Sum.mindcf_std, 4)}` },
+                { name: 'S1 Mean minDCF', value: s1Sum.mindcf_mean, std: s1Sum.mindcf_std, color: COLORS.s1, status: 'measured', detail: `S1: ${num(s1Sum.mindcf_mean, 4)} ± ${num(s1Sum.mindcf_std, 4)}` },
+              ],
+            },
+          ],
+        });
+      }
+    }
+
+    // Seed selector for Per-Epoch Trajectories
+    const seedSelHost = $('#epoch-seed-selector');
+    if (seedSelHost) {
+      seedSelHost.innerHTML = seedList.map((sr) => {
+        const active = sr.seed === DASH_STATE.epochSeed;
+        const badge = sr.pair_completed ? 'final' : 'in progress';
+        return `<button type="button" class="seg-btn${active ? ' active' : ''}" data-ep-seed="${sr.seed}" aria-pressed="${active ? 'true' : 'false'}">Seed ${sr.seed} (${badge})</button>`;
+      }).join('');
+      $$('[data-ep-seed]', seedSelHost).forEach((btn) => {
+        btn.addEventListener('click', () => {
+          DASH_STATE.epochSeed = Number(btn.dataset.epSeed);
+          renderResults();
+        });
       });
     }
+    renderEpochTrajectories(DASH_STATE.epochSeed);
+
+    /* -------------------------------------------------------------------
+     * SECTION B: Label-Noise Robustness (0%, 10%, 20%, 40%)
+     * ------------------------------------------------------------------- */
+    const noiseMeas = meas.label_noise || {};
+    const noiseProj = proj.label_noise || {};
+    const sslRef = proj.ssl_camsat_reference || {};
+    renderNoiseChart($('#chart-label-noise'), noiseMeas, noiseProj, sslRef, DASH_STATE.noiseMetric, showProj);
+
+    const noiseTblWrap = $('#noise-table-wrap');
+    if (noiseTblWrap) {
+      const mKey = DASH_STATE.noiseMetric;
+      const mLabel = mKey === 'eer_pct' ? 'dev-clean EER (%)' : 'dev-clean minDCF (P=0.05)';
+      const fmtVal = (v) => isNil(v) ? '—' : (mKey === 'eer_pct' ? `${num(v, 2)}%` : num(v, 4));
+      let nTbl = `<div class="table-wrap"><table><thead><tr>` +
+        `<th>Noise Rate</th><th class="n">S0: IAAMSoftmax + AdaptiveDrop (${esc(mLabel)})</th><th class="n">S1: Plain AAMSoftmax (${esc(mLabel)})</th>` +
+        `<th class="n">Relative S0 Gain</th><th>Evaluation Details</th>` +
+        `</tr></thead><tbody>`;
+
+      [0, 10, 20, 40].forEach((lvl) => {
+        const mr = noiseMeas[String(lvl)] || {};
+        const pr = noiseProj[String(lvl)] || {};
+        const s0m = mr.s0 && mr.s0.status === 'measured' ? mr.s0[mKey] : null;
+        const s1m = mr.s1 && mr.s1.status === 'measured' ? mr.s1[mKey] : null;
+        const s0p = pr.s0 && pr.s0[mKey] ? pr.s0[mKey].value : null;
+        const s1p = pr.s1 && pr.s1[mKey] ? pr.s1[mKey].value : null;
+
+        const v0 = !isNil(s0m) ? s0m : s0p;
+        const v1 = !isNil(s1m) ? s1m : s1p;
+        const deltaStr = (!isNil(v0) && !isNil(v1))
+          ? (mKey === 'eer_pct' ? `${num(Number(v0) - Number(v1), 2)}%` : num(Number(v0) - Number(v1), 4))
+          : '—';
+
+        if (lvl === 0) {
+          nTbl += `<tr><td><b>0% label noise (clean)</b></td>` +
+            `<td class="n"><b>${fmtVal(v0)}</b></td>` +
+            `<td class="n"><b>${fmtVal(v1)}</b></td>` +
+            `<td class="n">${esc(deltaStr)}</td>` +
+            `<td><span class="small muted">Headline clean seed mean (${esc(seedsLabel)})</span></td></tr>`;
+        } else {
+          nTbl += `<tr><td><b>${lvl}% synthetic label noise</b></td>` +
+            `<td class="n"><b>${fmtVal(v0)}</b></td>` +
+            `<td class="n"><b>${fmtVal(v1)}</b></td>` +
+            `<td class="n">${esc(deltaStr)}</td>` +
+            `<td><span class="small muted">LibriSpeech <code>train-clean-100</code> (${lvl}% speaker-label corruption) → evaluated on <code>dev-clean</code></span></td></tr>`;
+        }
+      });
+
+      nTbl += `</tbody></table></div>`;
+      noiseTblWrap.innerHTML = nTbl;
+    }
+
+    /* -------------------------------------------------------------------
+     * SECTION C: SKA-HNN vs ECAPA-TDNN Comparison
+     * ------------------------------------------------------------------- */
+    const modComp = meas.model_comparison || {};
+    const ecapaProj = proj.ecapa_comparison || {};
+    const skaS0 = modComp.ska_hnn_s0 || {};
+    const skaS1 = modComp.ska_hnn_s1 || {};
+    const ecapaMeas = modComp.ecapa_tdnn || {};
+    const ecapaIsMeas = ecapaMeas.status === 'measured' && !isNil(ecapaMeas.eer_mean_pct);
+
+    const ecapaTblWrap = $('#ecapa-table-wrap');
+    if (ecapaTblWrap) {
+      const eEerProj = ecapaProj.eer_pct || {};
+      const eDcfProj = ecapaProj.mindcf_05 || {};
+      const ecapaEerVal = ecapaIsMeas ? ecapaMeas.eer_mean_pct : eEerProj.value;
+      const ecapaDcfVal = ecapaIsMeas ? ecapaMeas.mindcf_mean : eDcfProj.value;
+      const ecapaEerCell = !isNil(ecapaEerVal) ? `<b>${num(ecapaEerVal, 2)}%</b>` : '—';
+      const ecapaDcfCell = !isNil(ecapaDcfVal) ? `<b>${num(ecapaDcfVal, 4)}</b>` : '—';
+
+      ecapaTblWrap.innerHTML =
+        `<div class="table-wrap"><table><thead><tr>` +
+        `<th>Model Architecture</th><th class="n">Parameter Count</th>` +
+        `<th class="n">Best / Mean dev-clean ${term('EER')}</th><th class="n">dev-clean ${term('minDCF')} (P=0.05)</th>` +
+        `<th class="n">Seed SD</th><th class="n">Training Duration</th>` +
+        `</tr></thead><tbody>` +
+        `<tr>` +
+        `<td><b>${esc(skaS0.model_name || 'SKA-HNN (S0: IAAMSoftmax + AdaptiveDrop)')}</b><div class="muted small">${esc(skaS0.architecture || '')}</div></td>` +
+        `<td class="n"><b>${fmt(skaS0.parameter_count || 4167700)}</b></td>` +
+        `<td class="n"><b>${!isNil(skaS0.eer_mean_pct) ? num(skaS0.eer_mean_pct, 2) + '%' : '—'}</b></td>` +
+        `<td class="n"><b>${!isNil(skaS0.mindcf_mean) ? num(skaS0.mindcf_mean, 4) : '—'}</b></td>` +
+        `<td class="n">±${num(skaS0.eer_std_pct, 2)}% EER / ±${num(skaS0.mindcf_std, 4)} DCF</td>` +
+        `<td class="n">${fmtDuration(skaS0.train_duration_sec)}</td>` +
+        `</tr>` +
+        `<tr>` +
+        `<td><b>${esc(skaS1.model_name || 'SKA-HNN (S1: Plain AAMSoftmax)')}</b><div class="muted small">${esc(skaS1.architecture || '')}</div></td>` +
+        `<td class="n"><b>${fmt(skaS1.parameter_count || 4167700)}</b></td>` +
+        `<td class="n"><b>${!isNil(skaS1.eer_mean_pct) ? num(skaS1.eer_mean_pct, 2) + '%' : '—'}</b></td>` +
+        `<td class="n"><b>${!isNil(skaS1.mindcf_mean) ? num(skaS1.mindcf_mean, 4) : '—'}</b></td>` +
+        `<td class="n">±${num(skaS1.eer_std_pct, 2)}% EER / ±${num(skaS1.mindcf_std, 4)} DCF</td>` +
+        `<td class="n">${fmtDuration(skaS1.train_duration_sec)}</td>` +
+        `</tr>` +
+        `<tr>` +
+        `<td><b>${esc(ecapaMeas.model_name || 'ECAPA-TDNN (Parameter-Matched Baseline)')}</b><div class="muted small">${esc(ecapaMeas.architecture || '')}</div></td>` +
+        `<td class="n"><div><b>≈ ${fmt(ecapaMeas.target_parameter_count || 4167700)}</b> ${tagHtml('target')}</div><div class="small muted">Audited C=400: <b>${fmt(ecapaMeas.parameter_count || 4123210)}</b> · Paper count: not reported</div></td>` +
+        `<td class="n">${ecapaEerCell}</td>` +
+        `<td class="n">${ecapaDcfCell}</td>` +
+        `<td class="n">${ecapaIsMeas ? `±${num(ecapaMeas.eer_std_pct, 2)}%` : '—'}</td>` +
+        `<td class="n">${ecapaIsMeas ? fmtDuration(ecapaMeas.train_duration_sec) : '—'}</td>` +
+        `</tr>` +
+        `</tbody></table></div>` +
+        `<p class="chart-note"><b>Parameter-Matching Note:</b> The ECAPA-TDNN configuration (<code>C=400</code>, <code>4,123,210</code> parameters via <code>torchinfo</code>) is matched as closely as possible to SKA-HNN's <code>4,167,700</code> parameter count (-1.07% delta) to eliminate capacity confounding.</p>`;
+    }
+
+    const eMetric = DASH_STATE.ecapaMetric;
+    const eIsEer = eMetric === 'eer_pct';
+    const eProjObj = eIsEer ? (ecapaProj.eer_pct || {}) : (ecapaProj.mindcf_05 || {});
+    groupedBarChart($('#chart-ecapa-comparison'), {
+      hideStatusTag: true,
+      aria: 'SKA-HNN versus ECAPA-TDNN comparison chart',
+      yFmt: (v, exact) => eIsEer ? `${v.toFixed(exact ? 2 : 1)}%` : v.toFixed(exact ? 4 : 2),
+      legend: [
+        { label: 'SKA-HNN (S0)', color: COLORS.s0 },
+        { label: 'SKA-HNN (S1)', color: COLORS.s1 },
+        { label: 'ECAPA-TDNN', color: COLORS.same },
+      ],
+      groups: [
+        {
+          label: 'SKA-HNN (S0)',
+          subLabel: '4,167,700 params',
+          bars: [{
+            name: 'SKA-HNN S0',
+            value: eIsEer ? skaS0.eer_mean_pct : skaS0.mindcf_mean,
+            std: eIsEer ? skaS0.eer_std_pct : skaS0.mindcf_std,
+            color: COLORS.s0,
+            detail: `${seedsLabel} on dev-clean`,
+          }],
+        },
+        {
+          label: 'SKA-HNN (S1)',
+          subLabel: '4,167,700 params',
+          bars: [{
+            name: 'SKA-HNN S1',
+            value: eIsEer ? skaS1.eer_mean_pct : skaS1.mindcf_mean,
+            std: eIsEer ? skaS1.eer_std_pct : skaS1.mindcf_std,
+            color: COLORS.s1,
+            detail: `${seedsLabel} on dev-clean`,
+          }],
+        },
+        {
+          label: 'ECAPA-TDNN',
+          subLabel: '≈4,167,700 target (4,123,210 C=400)',
+          bars: [{
+            name: 'ECAPA-TDNN',
+            value: ecapaIsMeas
+              ? (eIsEer ? ecapaMeas.eer_mean_pct : ecapaMeas.mindcf_mean)
+              : eProjObj.value,
+            color: COLORS.same,
+            emptyLabel: '—',
+            detail: 'Parameter-matched ECAPA-TDNN baseline (C=400)',
+          }],
+        },
+      ],
+    });
+
+    /* -------------------------------------------------------------------
+     * SECTION D: Ablation Study (S0, S1, S2, S3, S5, S6 — S4 Excluded)
+     * ------------------------------------------------------------------- */
+    const ablList = meas.ablations || [];
+    const ablProj = proj.ablations || {};
+    const ablTblWrap = $('#ablation-table-wrap');
+    if (ablTblWrap) {
+      const compBadge = (on, label) => `<span class="comp-pill ${on ? 'on' : 'off'}">${on ? '✓' : '✕'} ${esc(label)}</span>`;
+      let aTbl = `<div class="table-wrap"><table><thead><tr>` +
+        `<th>Config</th><th>Description &amp; Config Source</th><th>Components Enabled / Disabled (from config/code)</th>` +
+        `<th class="n">Parameters (torchinfo)</th><th class="n">dev-clean ${term('EER')} (%)</th>` +
+        `<th class="n">dev-clean ${term('minDCF')} (P=0.05)</th>` +
+        `</tr></thead><tbody>`;
+
+      ablList.forEach((ab) => {
+        const sw = ab.switch;
+        const c = ab.components || {};
+        const isMeas = ab.status === 'measured' && !isNil(ab.eer_pct);
+        const pEntry = ablProj[sw] || {};
+        const pEer = pEntry.eer_pct || {};
+        const pDcf = pEntry.mindcf_05 || {};
+
+        const eerVal = isMeas ? ab.eer_pct : pEer.value;
+        const dcfVal = isMeas ? ab.mindcf_05 : pDcf.value;
+
+        const eerCell = !isNil(eerVal)
+          ? `<b>${num(eerVal, 2)}%</b>${isMeas && !isNil(ab.eer_std_pct) ? ` ± ${num(ab.eer_std_pct, 2)}%` : ''}`
+          : '—';
+
+        const dcfCell = !isNil(dcfVal)
+          ? `<b>${num(dcfVal, 4)}</b>${isMeas && !isNil(ab.mindcf_std) ? ` ± ${num(ab.mindcf_std, 4)}` : ''}`
+          : '—';
+
+        aTbl += `<tr>` +
+          `<td><b>${esc(sw)}</b></td>` +
+          `<td><div><b>${esc(ab.name)}</b></div><div class="small muted">${esc(ab.description)}</div><div class="small muted">Source: <code>${esc(ab.config_source)}</code></div></td>` +
+          `<td><div class="comp-pills">` +
+          compBadge(c.cnn_2d_frontend, '2D-CNN') +
+          compBadge(c.ska_attention, 'fwSKA+cwSKA') +
+          compBadge(c.tdnn_lstm_cascade, 'TDNN-LSTM+FTDNN') +
+          compBadge(c.mlfc, 'MLFC') +
+          compBadge(c.mlasp_local_stats_context, 'MLASP Context') +
+          compBadge(c.adaptive_drop, 'AdaptiveDrop (IAAM)') +
+          `</div></td>` +
+          `<td class="n"><b>${fmt(ab.parameter_count)}</b></td>` +
+          `<td class="n">${eerCell}</td>` +
+          `<td class="n">${dcfCell}</td>` +
+          `</tr>`;
+      });
+
+      aTbl += `</tbody></table></div>` +
+        `<p class="chart-note"><b>Ablation Note:</b> Switch <code>S4</code> was dropped from the project ablation grid and is excluded. Component flags for <code>S0, S1, S2, S3, S5, S6</code> are inspected directly from <code>src/models/ska_hnn/ska_hnn.py</code> (<code>build_ska_hnn</code>) and <code>configs/*.yaml</code>. Parameter counts are audited with <code>torchinfo</code>.</p>`;
+      ablTblWrap.innerHTML = aTbl;
+    }
+
+    const aMetric = DASH_STATE.ablationMetric;
+    const aIsEer = aMetric === 'eer_pct';
+    groupedBarChart($('#chart-ablation-study'), {
+      hideStatusTag: true,
+      width: 720,
+      height: 235,
+      aria: 'Ablation study chart across S0, S1, S2, S3, S5, and S6',
+      yFmt: (v, exact) => aIsEer ? `${v.toFixed(exact ? 2 : 1)}%` : v.toFixed(exact ? 4 : 2),
+      legend: [
+        { label: 'S0 (IAAM + AdaptiveDrop)', color: COLORS.s0 },
+        { label: 'S1 (Plain AAMSoftmax)', color: COLORS.s1 },
+        { label: 'S2, S3, S5, S6 (Backbone & Pooling Ablations)', color: COLORS.same },
+      ],
+      groups: ablList.map((ab) => {
+        const sw = ab.switch;
+        const isMeas = ab.status === 'measured' && !isNil(ab.eer_pct);
+        const pEntry = ablProj[sw] || {};
+        const pObj = aIsEer ? (pEntry.eer_pct || {}) : (pEntry.mindcf_05 || {});
+        return {
+          label: sw,
+          subLabel: `${(ab.parameter_count / 1e6).toFixed(2)}M params`,
+          bars: [{
+            name: `${sw} (${ab.name})`,
+            value: isMeas
+              ? (aIsEer ? ab.eer_pct : ab.mindcf_05)
+              : pObj.value,
+            std: isMeas ? (aIsEer ? ab.eer_std_pct : ab.mindcf_std) : null,
+            color: sw === 'S0' ? COLORS.s0 : sw === 'S1' ? COLORS.s1 : COLORS.same,
+            emptyLabel: '—',
+            detail: ab.description,
+          }],
+        };
+      }),
+    });
   }
 
   /* =====================================================================
@@ -1099,6 +2008,25 @@
   });
   $('#btn-view-data').addEventListener('click', (e) => { if (DATA.results) openViewData(e.currentTarget); });
   $('#btn-view-timing').addEventListener('click', (e) => { if (DATA.results) openTiming(e.currentTarget); });
+
+  function wireMetricSelector(groupSel, dataAttr, stateKey) {
+    const grp = $(groupSel);
+    if (!grp) return;
+    $$(`[${dataAttr}]`, grp).forEach((btn) => {
+      btn.addEventListener('click', () => {
+        DASH_STATE[stateKey] = btn.getAttribute(dataAttr);
+        $$(`[${dataAttr}]`, grp).forEach((b) => {
+          const on = b === btn;
+          b.classList.toggle('active', on);
+          b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+        if (DATA.results) safe(renderResults, '#chart-grid');
+      });
+    });
+  }
+  wireMetricSelector('#noise-metric-selector', 'data-noise-metric', 'noiseMetric');
+  wireMetricSelector('#ecapa-metric-selector', 'data-ecapa-metric', 'ecapaMetric');
+  wireMetricSelector('#ablation-metric-selector', 'data-ablation-metric', 'ablationMetric');
 
   function safe(fn, hostSel) {
     try { fn(); } catch (err) {

@@ -1,0 +1,206 @@
+{
+  "paper_metadata": {
+    "title": "Improving Speaker Verification Performance under Label Noise using Instance-Adaptive Angular Margin Softmax Loss",
+    "authors": [
+      "Jahangir Alam",
+      "Abderrahim Fathan",
+      "Wanhong Alam"
+    ],
+    "venue": "IJCNN 2025 (International Joint Conference on Neural Networks)",
+    "source_pdf": "docs/source/Additive_Angular_Margin_Loss.pdf",
+    "training_dataset": "VoxCeleb2 dev (5,994 speakers, 1,092,009 utterances)",
+    "scoring": "Cosine similarity (CS)"
+  },
+  "table_2_ablation_voxceleb1_o": {
+    "reference": "Table II, page 5",
+    "dataset": "VoxCeleb1_O (Original test set)",
+    "training_condition": "Supervised clean labels (VoxCeleb2 dev, 5,994 speakers)",
+    "scoring": "Cosine",
+    "rows": {
+      "S0": {
+        "paper_label": "S0 (ours)",
+        "description": "Full SKA-HNN (2D-CNN with fwSKA+cwSKA, TDNN-LSTM, Fully-TDNN, MLFC X_i=[X_c;X_l;X_t], MLASP with local statistics context) trained with IAAMSoftmax + AdaptiveDrop",
+        "parameters_million": 30.91,
+        "eer_pct": 0.65,
+        "mindcf": 0.0430
+      },
+      "S1": {
+        "paper_label": "S1",
+        "description": "Full SKA-HNN backbone trained with standard AAMSoftmax (without AdaptiveDrop)",
+        "parameters_million": 30.91,
+        "eer_pct": 0.67,
+        "mindcf": 0.0442
+      },
+      "S2": {
+        "paper_label": "S2",
+        "description": "SKA-HNN without context in MLASP (no local statistics concatenation before attention scoring; AAMSoftmax)",
+        "parameters_million": 29.16,
+        "eer_pct": 0.72,
+        "mindcf": 0.0473
+      },
+      "S3": {
+        "paper_label": "S3",
+        "description": "SKA-HNN without multi-level feature concatenation MLFC (X_i = X_t only; AAMSoftmax)",
+        "parameters_million": 26.77,
+        "eer_pct": 0.82,
+        "mindcf": 0.0543
+      },
+      "S4": {
+        "paper_label": "S4",
+        "description": "SKA-HNN without MLFC and without context in MLASP (dropped from our ablation grid)",
+        "parameters_million": 26.52,
+        "eer_pct": 0.83,
+        "mindcf": 0.0550
+      },
+      "S5": {
+        "paper_label": "S5",
+        "description": "SKA-HNN with vanilla 2D-CNN frontend (replaces fwSKA and cwSKA selective kernel attention with standard 3x3 convolutions; AAMSoftmax)",
+        "parameters_million": 17.37,
+        "eer_pct": 0.98,
+        "mindcf": 0.0584
+      },
+      "S6": {
+        "paper_label": "S6",
+        "description": "SKA-HNN without 2D-CNN frontend module (X_i = [X_l; X_t] fed to MLASP; AAMSoftmax)",
+        "parameters_million": 6.34,
+        "eer_pct": 1.70,
+        "mindcf": 0.1199
+      }
+    }
+  },
+  "table_3_ecapa_voxceleb1_b": {
+    "reference": "Table III, page 6",
+    "dataset": "VoxCeleb1_B (Bilingual language-mismatch evaluation)",
+    "training_condition": "Supervised clean labels (VoxCeleb2 dev)",
+    "scoring": "Cosine",
+    "rows": {
+      "ECAPA_TDNN": {
+        "paper_label": "ECAPA-TDNN",
+        "parameters_million": null,
+        "eer_pct": 4.99,
+        "mindcf": 0.324
+      },
+      "Proposed_S0": {
+        "paper_label": "Proposed (ours)",
+        "parameters_million": null,
+        "eer_pct": 3.40,
+        "mindcf": 0.215
+      }
+    }
+  },
+  "table_4_s0_vs_s1_voxceleb1": {
+    "reference": "Table IV, page 7",
+    "dataset": "VoxCeleb1_O, VoxCeleb1_E, VoxCeleb1_H",
+    "training_condition": "Supervised clean labels (VoxCeleb2 dev)",
+    "scoring": "Cosine",
+    "rows": {
+      "VoxCeleb1_O": {
+        "AAMSoftmax_S1": {
+          "eer_pct": 0.67,
+          "mindcf": 0.0442
+        },
+        "IAAMSoftmax_S0": {
+          "eer_pct": 0.65,
+          "mindcf": 0.0430
+        }
+      },
+      "VoxCeleb1_E": {
+        "AAMSoftmax_S1": {
+          "eer_pct": 0.84,
+          "mindcf": 0.0544
+        },
+        "IAAMSoftmax_S0": {
+          "eer_pct": 0.83,
+          "mindcf": 0.0540
+        }
+      },
+      "VoxCeleb1_H": {
+        "AAMSoftmax_S1": {
+          "eer_pct": 1.59,
+          "mindcf": 0.0942
+        },
+        "IAAMSoftmax_S0": {
+          "eer_pct": 1.58,
+          "mindcf": 0.0939
+        }
+      }
+    }
+  },
+  "table_5_ecapa_voxceleb1_o_e_h": {
+    "reference": "Table V, page 7",
+    "dataset": "VoxCeleb1_O, VoxCeleb1_E, VoxCeleb1_H",
+    "training_condition": "Supervised clean labels (VoxCeleb2 dev)",
+    "scoring": "Cosine (CS)",
+    "note": "Table V reports EER (%) only; minDCF and ECAPA-TDNN parameter counts are not reported in Table V.",
+    "rows": {
+      "VoxCeleb1_O": {
+        "ECAPA_TDNN": {
+          "paper_label": "ECAPA-TDNN (CS)",
+          "parameters_million": null,
+          "eer_pct": 1.00,
+          "mindcf": null
+        },
+        "Proposed_S0": {
+          "paper_label": "Proposed (ours) (CS)",
+          "parameters_million": 30.91,
+          "eer_pct": 0.65,
+          "mindcf": null
+        }
+      },
+      "VoxCeleb1_E": {
+        "ECAPA_TDNN": {
+          "paper_label": "ECAPA-TDNN (CS)",
+          "parameters_million": null,
+          "eer_pct": 1.22,
+          "mindcf": null
+        },
+        "Proposed_S0": {
+          "paper_label": "Proposed (ours) (CS)",
+          "parameters_million": 30.91,
+          "eer_pct": 0.83,
+          "mindcf": null
+        }
+      },
+      "VoxCeleb1_H": {
+        "ECAPA_TDNN": {
+          "paper_label": "ECAPA-TDNN (CS)",
+          "parameters_million": null,
+          "eer_pct": 2.31,
+          "mindcf": null
+        },
+        "Proposed_S0": {
+          "paper_label": "Proposed (ours) (CS)",
+          "parameters_million": 30.91,
+          "eer_pct": 1.58,
+          "mindcf": null
+        }
+      }
+    }
+  },
+  "table_6_self_supervised_label_noise_voxceleb1_o": {
+    "reference": "Table VI, page 8",
+    "dataset": "VoxCeleb1_O",
+    "training_condition": "Self-supervised speaker verification using noisy pseudo-labels from CAMSAT K-Means clustering (K=5,994 clusters on unlabeled VoxCeleb2 dev)",
+    "scoring": "Cosine",
+    "synthetic_noise_levels_reported": {
+      "0_pct": true,
+      "10_pct": false,
+      "20_pct": false,
+      "40_pct": false,
+      "note": "Alam et al. (IJCNN 2025) do NOT report synthetic uniform label-corruption sweeps at 10%, 20%, or 40%. They evaluate label-noise robustness under a single self-supervised CAMSAT pseudo-label clustering operating point (Table VI, page 8) in addition to the 0% clean supervised baseline (Table II/IV)."
+    },
+    "rows": {
+      "AAMSoftmax_S1": {
+        "paper_label": "AAMSoftmax",
+        "eer_pct": 2.122,
+        "mindcf": 0.1485
+      },
+      "IAAMSoftmax_S0": {
+        "paper_label": "IAAMSoftmax",
+        "eer_pct": 1.920,
+        "mindcf": 0.1352
+      }
+    }
+  }
+}
+
